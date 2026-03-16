@@ -1,0 +1,1922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cloud Computing — From Ground to Sky</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0B1120;font-family:'Inter',system-ui,sans-serif}
+canvas{display:block;position:fixed;top:0;left:0;width:100%;height:100%}
+
+/* Text overlay — max 2 lines */
+#text-overlay{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding-bottom:8vh}
+#scene-title{font-size:clamp(28px,5vw,64px);font-weight:800;color:#F8FAFC;text-align:center;opacity:0;text-shadow:0 0 40px rgba(59,130,246,.5);line-height:1.1;padding:0 20px}
+#scene-subtitle{font-size:clamp(14px,2vw,24px);font-weight:300;color:rgba(248,250,252,.7);text-align:center;opacity:0;margin-top:8px;padding:0 20px}
+
+/* UI Chrome */
+#progress-bar{position:fixed;top:0;left:0;height:3px;background:linear-gradient(90deg,#3B82F6,#F59E0B);z-index:100;width:0%;transition:width .15s}
+#chapter-nav{position:fixed;right:16px;top:50%;transform:translateY(-50%);z-index:100;display:flex;flex-direction:column;gap:8px}
+.nav-dot{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.15);cursor:pointer;transition:all .3s;border:none;padding:0}
+.nav-dot.active{background:#3B82F6;box-shadow:0 0 10px #3B82F6}
+.nav-dot:hover{background:rgba(255,255,255,.4)}
+#controls{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:100;display:flex;gap:16px;align-items:center}
+#controls button{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:#F8FAFC;width:44px;height:44px;border-radius:50%;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all .2s;backdrop-filter:blur(8px)}
+#controls button:hover{background:rgba(255,255,255,.18)}
+#time-display{color:rgba(248,250,252,.5);font-size:13px;font-variant-numeric:tabular-nums;min-width:80px;text-align:center}
+</style>
+</head>
+<body>
+<canvas id="main-canvas"></canvas>
+
+<div id="text-overlay">
+  <div id="scene-title"></div>
+  <div id="scene-subtitle"></div>
+</div>
+
+<div id="progress-bar"></div>
+
+<nav id="chapter-nav"></nav>
+
+<div id="controls">
+  <button id="btn-prev" title="Previous">&#9664;</button>
+  <button id="btn-play" title="Play/Pause">&#9654;</button>
+  <button id="btn-next" title="Next">&#9654;</button>
+  <span id="time-display">0:00</span>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   SECTION A — Canvas Setup & Globals
+   ═══════════════════════════════════════════════════════════════ */
+const canvas = document.getElementById('main-canvas');
+const ctx = canvas.getContext('2d');
+let W, H, DPR;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  canvas.width = W * DPR;
+  canvas.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION B — Easing & Utility
+   ═══════════════════════════════════════════════════════════════ */
+const ease = {
+  inOut: t => t < .5 ? 2*t*t : -1+(4-2*t)*t,
+  out: t => 1-(1-t)*(1-t),
+  in: t => t*t,
+  outBack: t => { const c = 1.70158; return 1 + (c+1)*Math.pow(t-1,3) + c*Math.pow(t-1,2); },
+  elastic: t => t===0||t===1?t:Math.pow(2,-10*t)*Math.sin((t-.075)*2*Math.PI/.3)+1
+};
+function lerp(a,b,t){ return a+(b-a)*t; }
+function clamp(v,mn,mx){ return Math.max(mn,Math.min(mx,v)); }
+function map(v,a,b,c,d){ return c+(d-c)*((v-a)/(b-a)); }
+function subProgress(p,start,end){ return clamp((p-start)/(end-start),0,1); }
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION C — Drawing Primitives
+   ═══════════════════════════════════════════════════════════════ */
+
+function drawCloud(ctx, x, y, w, h, color, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha || 1;
+  ctx.fillStyle = color || '#3B82F6';
+  ctx.beginPath();
+  const r = h * 0.4;
+  ctx.arc(x - w*0.2, y, r, 0, Math.PI*2);
+  ctx.arc(x + w*0.2, y, r, 0, Math.PI*2);
+  ctx.arc(x, y - h*0.25, r*1.3, 0, Math.PI*2);
+  ctx.arc(x - w*0.35, y + h*0.1, r*0.7, 0, Math.PI*2);
+  ctx.arc(x + w*0.35, y + h*0.1, r*0.7, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGlow(ctx, x, y, radius, color, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha || 0.5;
+  const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
+  g.addColorStop(0, color || '#3B82F6');
+  g.addColorStop(1, 'transparent');
+  ctx.fillStyle = g;
+  ctx.fillRect(x-radius, y-radius, radius*2, radius*2);
+  ctx.restore();
+}
+
+function drawServer(ctx, x, y, w, h, color, ledColor) {
+  ctx.save();
+  const r = 4;
+  ctx.fillStyle = color || '#1E293B';
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.roundRect(x-w/2, y-h/2, w, h, r);
+  ctx.fill();
+  ctx.stroke();
+  // LED
+  ctx.fillStyle = ledColor || '#22D3EE';
+  ctx.beginPath();
+  ctx.arc(x+w/2-10, y, 3, 0, Math.PI*2);
+  ctx.fill();
+  // Lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  for(let i=0;i<3;i++){
+    ctx.beginPath();
+    ctx.moveTo(x-w/2+8, y-h/4+i*(h/4));
+    ctx.lineTo(x+w/2-18, y-h/4+i*(h/4));
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawServerRack(ctx, x, y, w, h, count, color, progress) {
+  const serverH = h / (count + 1);
+  const gap = serverH * 0.15;
+  for(let i = 0; i < count; i++){
+    const p = clamp((progress - i/(count*1.5)) * count, 0, 1);
+    if(p <= 0) continue;
+    const sy = y - h/2 + i * (serverH + gap) + serverH/2;
+    ctx.globalAlpha = p;
+    drawServer(ctx, x, sy, w * 0.9, serverH * 0.85, color);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawLaptop(ctx, x, y, size, color) {
+  ctx.save();
+  const w = size, h = size * 0.65;
+  // Screen
+  ctx.fillStyle = color || '#1E293B';
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(x-w/2, y-h/2-h*0.1, w, h, 6);
+  ctx.fill();
+  ctx.stroke();
+  // Screen inner glow
+  ctx.fillStyle = 'rgba(59,130,246,0.15)';
+  ctx.fillRect(x-w/2+4, y-h/2-h*0.1+4, w-8, h-8);
+  // Base
+  ctx.fillStyle = color || '#1E293B';
+  ctx.beginPath();
+  ctx.moveTo(x-w*0.6, y+h/2-h*0.1);
+  ctx.lineTo(x+w*0.6, y+h/2-h*0.1);
+  ctx.lineTo(x+w*0.5, y+h/2-h*0.1+6);
+  ctx.lineTo(x-w*0.5, y+h/2-h*0.1+6);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawDatabase(ctx, x, y, w, h, color) {
+  ctx.save();
+  ctx.fillStyle = color || '#6366F1';
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth = 1.5;
+  const ry = h * 0.18;
+  // Body
+  ctx.beginPath();
+  ctx.ellipse(x, y - h/2 + ry, w/2, ry, 0, Math.PI, 0);
+  ctx.lineTo(x + w/2, y + h/2 - ry);
+  ctx.ellipse(x, y + h/2 - ry, w/2, ry, 0, 0, Math.PI);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // Top ellipse
+  ctx.beginPath();
+  ctx.ellipse(x, y - h/2 + ry, w/2, ry, 0, 0, Math.PI*2);
+  ctx.fillStyle = color ? color : '#818CF8';
+  ctx.fill();
+  ctx.stroke();
+  // Middle line
+  ctx.beginPath();
+  ctx.ellipse(x, y - h*0.05, w/2, ry*0.8, 0, 0, Math.PI);
+  ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawNetworkLine(ctx, x1, y1, x2, y2, progress, color, width, dashed) {
+  ctx.save();
+  ctx.strokeStyle = color || '#3B82F6';
+  ctx.lineWidth = width || 2;
+  ctx.globalAlpha = 0.8;
+  if(dashed) ctx.setLineDash([6, 4]);
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  const ex = lerp(x1, x2, progress);
+  const ey = lerp(y1, y2, progress);
+  ctx.lineTo(ex, ey);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawDataPacket(ctx, x1, y1, x2, y2, t, color, size) {
+  const px = lerp(x1, x2, t);
+  const py = lerp(y1, y2, t);
+  const s = size || 5;
+  ctx.save();
+  ctx.fillStyle = color || '#22D3EE';
+  ctx.shadowColor = color || '#22D3EE';
+  ctx.shadowBlur = 12;
+  ctx.beginPath();
+  ctx.arc(px, py, s, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawGlobe(ctx, x, y, r, rotation, color) {
+  ctx.save();
+  ctx.strokeStyle = color || 'rgba(59,130,246,0.4)';
+  ctx.lineWidth = 1.5;
+  // Outer circle
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI*2);
+  ctx.stroke();
+  // Horizontal lines
+  for(let i = -2; i <= 2; i++) {
+    const ly = y + i * r * 0.3;
+    const lw = Math.sqrt(r*r - (i*r*0.3)*(i*r*0.3));
+    ctx.beginPath();
+    ctx.ellipse(x, ly, lw, 2, 0, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  // Meridians
+  for(let i = 0; i < 3; i++) {
+    const angle = rotation + i * Math.PI/3;
+    const rx = r * Math.abs(Math.cos(angle));
+    ctx.beginPath();
+    ctx.ellipse(x, y, Math.max(rx, 2), r, 0, 0, Math.PI*2);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawGear(ctx, x, y, outerR, innerR, teeth, rotation, color) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+  ctx.fillStyle = color || 'rgba(148,163,184,0.6)';
+  ctx.beginPath();
+  for(let i = 0; i < teeth; i++) {
+    const a1 = (i / teeth) * Math.PI * 2;
+    const a2 = ((i + 0.35) / teeth) * Math.PI * 2;
+    const a3 = ((i + 0.5) / teeth) * Math.PI * 2;
+    const a4 = ((i + 0.85) / teeth) * Math.PI * 2;
+    if(i === 0) ctx.moveTo(Math.cos(a1)*innerR, Math.sin(a1)*innerR);
+    ctx.lineTo(Math.cos(a2)*innerR, Math.sin(a2)*innerR);
+    ctx.lineTo(Math.cos(a2)*outerR, Math.sin(a2)*outerR);
+    ctx.lineTo(Math.cos(a3)*outerR, Math.sin(a3)*outerR);
+    ctx.lineTo(Math.cos(a3)*innerR, Math.sin(a3)*innerR);
+    ctx.lineTo(Math.cos(a4)*innerR, Math.sin(a4)*innerR);
+  }
+  ctx.closePath();
+  ctx.fill();
+  // Center hole
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  ctx.arc(0, 0, innerR*0.35, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.restore();
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color, width, headSize) {
+  const hs = headSize || 10;
+  const angle = Math.atan2(y2-y1, x2-x1);
+  ctx.save();
+  ctx.strokeStyle = color || '#3B82F6';
+  ctx.fillStyle = color || '#3B82F6';
+  ctx.lineWidth = width || 2;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - hs*Math.cos(angle-Math.PI/6), y2 - hs*Math.sin(angle-Math.PI/6));
+  ctx.lineTo(x2 - hs*Math.cos(angle+Math.PI/6), y2 - hs*Math.sin(angle+Math.PI/6));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBalanceScale(ctx, x, y, size, tilt, color) {
+  ctx.save();
+  const baseW = size * 0.15, baseH = size * 0.08;
+  const poleH = size * 0.55, beamW = size * 0.8;
+  // Base
+  ctx.fillStyle = color || '#94A3B8';
+  ctx.beginPath();
+  ctx.roundRect(x-baseW, y+poleH/2, baseW*2, baseH, 4);
+  ctx.fill();
+  // Pole
+  ctx.fillRect(x-3, y-poleH/2, 6, poleH);
+  // Beam (tilted)
+  ctx.translate(x, y - poleH/2);
+  ctx.rotate(tilt);
+  ctx.fillRect(-beamW/2, -3, beamW, 6);
+  // Pans
+  const panW = size * 0.22;
+  [-1, 1].forEach(side => {
+    const px = side * beamW/2;
+    ctx.strokeStyle = color || '#94A3B8';
+    ctx.lineWidth = 2;
+    // Strings
+    ctx.beginPath();
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, size*0.18);
+    ctx.stroke();
+    // Pan
+    ctx.beginPath();
+    ctx.ellipse(px, size*0.2, panW, panW*0.2, 0, 0, Math.PI*2);
+    ctx.fillStyle = 'rgba(148,163,184,0.3)';
+    ctx.fill();
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+function drawPieChart(ctx, x, y, r, slices, progress) {
+  ctx.save();
+  let startAngle = -Math.PI/2;
+  slices.forEach(s => {
+    const sweep = s.value / 100 * Math.PI * 2 * progress;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.arc(x, y, r, startAngle, startAngle + sweep);
+    ctx.closePath();
+    ctx.fillStyle = s.color;
+    ctx.fill();
+    // Label
+    if(progress > 0.5) {
+      const mid = startAngle + sweep/2;
+      const lx = x + Math.cos(mid) * r * 1.25;
+      const ly = y + Math.sin(mid) * r * 1.25;
+      ctx.fillStyle = '#F8FAFC';
+      ctx.font = `600 ${Math.max(12, r*0.14)}px Inter`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.globalAlpha = (progress - 0.5) * 2;
+      ctx.fillText(s.label, lx, ly);
+      ctx.globalAlpha = 1;
+    }
+    startAngle += sweep;
+  });
+  ctx.restore();
+}
+
+function drawStrokeText(ctx, text, x, y, fontSize, color, progress) {
+  ctx.save();
+  ctx.font = `800 ${fontSize}px Inter`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if(progress < 1) {
+    ctx.strokeStyle = color || '#F8FAFC';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([1000 * progress, 1000]);
+    ctx.strokeText(text, x, y);
+  }
+  ctx.globalAlpha = clamp((progress - 0.6) / 0.4, 0, 1);
+  ctx.fillStyle = color || '#F8FAFC';
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+/* Particle System */
+class ParticleSystem {
+  constructor(count) {
+    this.particles = [];
+    for(let i = 0; i < count; i++) {
+      this.particles.push({
+        x: 0, y: 0, vx: 0, vy: 0,
+        tx: 0, ty: 0, // target
+        size: 1 + Math.random()*3,
+        alpha: 0.5 + Math.random()*0.5,
+        color: '#3B82F6',
+        life: 1
+      });
+    }
+  }
+  setFromGrid(cx, cy, cols, rows, spacing) {
+    const ox = cx - (cols-1)*spacing/2;
+    const oy = cy - (rows-1)*spacing/2;
+    let i = 0;
+    for(let r=0; r<rows && i<this.particles.length; r++) {
+      for(let c=0; c<cols && i<this.particles.length; c++, i++) {
+        this.particles[i].x = ox + c*spacing;
+        this.particles[i].y = oy + r*spacing;
+        this.particles[i].tx = this.particles[i].x;
+        this.particles[i].ty = this.particles[i].y;
+      }
+    }
+  }
+  setTargetCloud(cx, cy, w, h) {
+    this.particles.forEach(p => {
+      const angle = Math.random() * Math.PI * 2;
+      const rx = (Math.random()*0.5+0.2) * w/2;
+      const ry = (Math.random()*0.5+0.2) * h/2;
+      // Cloud shape bias
+      const cloudY = cy - Math.abs(Math.cos(angle)) * h * 0.15;
+      p.tx = cx + Math.cos(angle) * rx;
+      p.ty = cloudY + Math.sin(angle) * ry * 0.6;
+    });
+  }
+  draw(ctx, morphT, drift) {
+    drift = drift || 0;
+    ctx.save();
+    this.particles.forEach(p => {
+      const px = lerp(p.x, p.tx, morphT) + Math.sin(drift + p.size)*2;
+      const py = lerp(p.y, p.ty, morphT) + Math.cos(drift + p.alpha)*2;
+      ctx.globalAlpha = p.alpha * p.life;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(px, py, p.size * (0.5 + morphT*0.5), 0, Math.PI*2);
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION D — 12 Scene Objects
+   ═══════════════════════════════════════════════════════════════ */
+
+const scenes = [];
+
+/* ── Scene 1: Hook — Server Grid → Cloud ── */
+scenes.push({
+  title: 'Cloud Computing',
+  subtitle: 'What if unlimited computing power was one click away?',
+  bg: '#0B1120',
+  particles: new ParticleSystem(200),
+  init() {
+    this.particles.setFromGrid(W/2, H/2, 14, 14, Math.min(W,H)*0.04);
+    this.particles.setTargetCloud(W/2, H*0.4, W*0.5, H*0.35);
+    this.particles.particles.forEach(p => {
+      p.color = ['#3B82F6','#60A5FA','#93C5FD','#38BDF8','#F59E0B'][Math.floor(Math.random()*5)];
+    });
+  },
+  draw(ctx, p, dt) {
+    // Background glow
+    drawGlow(ctx, W/2, H*0.4, Math.min(W,H)*0.6, '#3B82F6', 0.1 + p*0.1);
+
+    // Phase 1: Show server grid (0-0.3)
+    const gridP = subProgress(p, 0, 0.3);
+    if(gridP < 1) {
+      const cols = 6, rows = 4;
+      const sw = Math.min(W,H)*0.08, sh = sw*0.45, gap = sw*1.3;
+      const ox = W/2 - (cols-1)*gap/2;
+      const oy = H/2 - (rows-1)*gap/2;
+      for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+        const delay = (r*cols+c) * 0.02;
+        const sp = clamp(ease.outBack(subProgress(gridP, delay, delay+0.5)), 0, 1.1);
+        if(sp > 0) {
+          ctx.globalAlpha = sp * (1 - ease.in(subProgress(p, 0.25, 0.45)));
+          drawServer(ctx, ox+c*gap, oy+r*gap, sw*sp, sh*sp, '#1E293B', '#22D3EE');
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Phase 2: Particles morph to cloud (0.3-0.7)
+    const morphP = ease.inOut(subProgress(p, 0.3, 0.75));
+    this.particles.draw(ctx, morphP, dt*0.5);
+
+    // Phase 3: Title glow (0.6-1)
+    const titleP = subProgress(p, 0.6, 0.85);
+    if(titleP > 0) {
+      drawGlow(ctx, W/2, H*0.4, Math.min(W,H)*0.4 * ease.out(titleP), '#F59E0B', 0.15 * titleP);
+    }
+  }
+});
+
+/* ── Scene 2: What Is Cloud Computing ── */
+scenes.push({
+  title: 'What Is Cloud Computing?',
+  subtitle: 'Like electricity — plug in, pay for what you use',
+  bg: '#0D1B2A',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H/2;
+
+    // Laptop at bottom
+    const laptopP = ease.out(subProgress(p, 0, 0.2));
+    const laptopY = cy + H*0.18;
+    const laptopSize = Math.min(W,H)*0.15;
+    ctx.globalAlpha = laptopP;
+    drawLaptop(ctx, cx, laptopY, laptopSize, '#1E293B');
+
+    // Data stream upward
+    const streamP = subProgress(p, 0.15, 0.5);
+    if(streamP > 0) {
+      const cloudY = cy - H*0.12;
+      for(let i=0; i<8; i++) {
+        const t = (streamP * 3 + i * 0.12) % 1;
+        drawDataPacket(ctx, cx + Math.sin(i)*15, laptopY - 30, cx + Math.sin(i*2)*10, cloudY + 30, t, '#22D3EE', 3);
+      }
+    }
+
+    // Cloud shape
+    const cloudP = ease.out(subProgress(p, 0.2, 0.45));
+    const cloudY2 = cy - H*0.12;
+    drawCloud(ctx, cx, cloudY2, Math.min(W,H)*0.35*cloudP, Math.min(W,H)*0.2*cloudP, 'rgba(59,130,246,0.25)', cloudP*0.8);
+
+    // Icons inside cloud
+    const iconsP = subProgress(p, 0.35, 0.6);
+    if(iconsP > 0) {
+      const icons = [
+        {draw: () => drawServer(ctx, cx-50, cloudY2, 30, 18, '#2563EB')},
+        {draw: () => drawDatabase(ctx, cx+50, cloudY2-10, 22, 30, '#6366F1')},
+        {draw: () => drawGear(ctx, cx, cloudY2+15, 14, 10, 8, dt, '#60A5FA')},
+      ];
+      icons.forEach((icon, i) => {
+        const ip = ease.outBack(subProgress(iconsP, i*0.15, i*0.15+0.5));
+        if(ip > 0) { ctx.globalAlpha = ip; icon.draw(); }
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    // Utility analogy: plug vs generator
+    const analP = subProgress(p, 0.55, 0.85);
+    if(analP > 0) {
+      const ap = ease.out(analP);
+      ctx.globalAlpha = ap;
+      // Left: generator (old way)
+      const lx = cx - W*0.22, ly = cy + H*0.05;
+      ctx.fillStyle = 'rgba(239,68,68,0.15)';
+      ctx.beginPath();
+      ctx.roundRect(lx-50, ly-40, 100, 80, 12);
+      ctx.fill();
+      drawGear(ctx, lx, ly, 22, 16, 8, dt*2, 'rgba(239,68,68,0.6)');
+      ctx.font = '600 13px Inter';
+      ctx.fillStyle = 'rgba(239,68,68,0.8)';
+      ctx.textAlign = 'center';
+      ctx.fillText('Own Infrastructure', lx, ly+50);
+
+      // Right: plug (cloud way)
+      const rx = cx + W*0.22, ry = ly;
+      ctx.fillStyle = 'rgba(16,185,129,0.15)';
+      ctx.beginPath();
+      ctx.roundRect(rx-50, ry-40, 100, 80, 12);
+      ctx.fill();
+      // Simple plug icon
+      ctx.strokeStyle = '#10B981';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(rx-12, ry-15);
+      ctx.lineTo(rx-12, ry+5);
+      ctx.moveTo(rx+12, ry-15);
+      ctx.lineTo(rx+12, ry+5);
+      ctx.moveTo(rx-18, ry+5);
+      ctx.lineTo(rx+18, ry+5);
+      ctx.lineTo(rx+12, ry+20);
+      ctx.lineTo(rx-12, ry+20);
+      ctx.lineTo(rx-18, ry+5);
+      ctx.stroke();
+      ctx.font = '600 13px Inter';
+      ctx.fillStyle = 'rgba(16,185,129,0.8)';
+      ctx.fillText('Cloud', rx, ry+50);
+
+      ctx.globalAlpha = 1;
+    }
+
+    // Stat counter
+    const statP = subProgress(p, 0.8, 1);
+    if(statP > 0) {
+      ctx.globalAlpha = ease.out(statP);
+      ctx.font = '600 16px Inter';
+      ctx.fillStyle = '#F59E0B';
+      ctx.textAlign = 'center';
+      const val = Math.floor(600 * statP);
+      ctx.fillText(`$${val}B+ market · 94% of enterprises`, cx, cy + H*0.32);
+      ctx.globalAlpha = 1;
+    }
+  }
+});
+
+/* ── Scene 3: Evolution Timeline ── */
+scenes.push({
+  title: 'The Evolution',
+  subtitle: 'From mainframes to the cloud era',
+  bg: '#0F172A',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H/2;
+    const lineY = cy + H*0.02;
+    const lineW = W * 0.75;
+    const startX = cx - lineW/2;
+
+    const eras = [
+      { year: '1960s', label: 'Mainframes', color: '#6366F1', x: 0 },
+      { year: '1980s', label: 'PCs', color: '#8B5CF6', x: 0.33 },
+      { year: '1990s', label: 'Client-Server', color: '#A78BFA', x: 0.66 },
+      { year: '2006', label: 'Cloud', color: '#3B82F6', x: 1 },
+    ];
+
+    // Timeline line
+    const lineP = ease.out(subProgress(p, 0, 0.4));
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, lineY);
+    ctx.lineTo(startX + lineW * lineP, lineY);
+    ctx.stroke();
+
+    eras.forEach((era, i) => {
+      const eraP = subProgress(p, 0.1 + i*0.18, 0.3 + i*0.18);
+      if(eraP <= 0) return;
+      const ep = ease.outBack(eraP);
+      const ex = startX + era.x * lineW;
+
+      // Dot
+      ctx.fillStyle = era.color;
+      ctx.beginPath();
+      ctx.arc(ex, lineY, 8*ep, 0, Math.PI*2);
+      ctx.fill();
+      drawGlow(ctx, ex, lineY, 30*ep, era.color, 0.3*ep);
+
+      // Year + label
+      ctx.globalAlpha = ep;
+      ctx.font = '700 14px Inter';
+      ctx.fillStyle = era.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(era.year, ex, lineY - 55);
+      ctx.font = '500 12px Inter';
+      ctx.fillStyle = 'rgba(248,250,252,0.7)';
+      ctx.fillText(era.label, ex, lineY - 38);
+
+      // Era-specific icon
+      const iconY = lineY + 45;
+      const iconSize = Math.min(W,H)*0.05;
+      if(i === 0) {
+        // Mainframe - big box
+        drawServer(ctx, ex, iconY, iconSize*1.5, iconSize, '#334155', era.color);
+        // Terminals
+        for(let t=-1;t<=1;t++) {
+          ctx.fillStyle = 'rgba(99,102,241,0.4)';
+          ctx.fillRect(ex+t*20-5, iconY+iconSize*0.8, 10, 7);
+          drawNetworkLine(ctx, ex+t*20, iconY+iconSize*0.5, ex, iconY+iconSize*0.3, ep, 'rgba(99,102,241,0.3)', 1, true);
+        }
+      } else if(i === 1) {
+        // PCs scattered
+        for(let pc=-1;pc<=1;pc++) {
+          ctx.fillStyle = 'rgba(139,92,246,0.5)';
+          ctx.fillRect(ex+pc*22-8, iconY-6, 16, 12);
+          ctx.fillRect(ex+pc*22-5, iconY+7, 10, 3);
+        }
+      } else if(i === 2) {
+        // Server rack with connected PCs
+        drawServer(ctx, ex, iconY-5, iconSize*0.8, iconSize*0.5, '#334155', era.color);
+        for(let c=-1;c<=1;c+=2) {
+          ctx.fillStyle = 'rgba(167,139,250,0.5)';
+          ctx.fillRect(ex+c*35-6, iconY+10, 12, 8);
+          drawNetworkLine(ctx, ex+c*35, iconY+14, ex, iconY, ep, 'rgba(167,139,250,0.3)', 1, true);
+        }
+      } else {
+        // Cloud
+        drawCloud(ctx, ex, iconY, iconSize*1.2, iconSize*0.7, 'rgba(59,130,246,0.6)', ep);
+      }
+      ctx.globalAlpha = 1;
+    });
+
+    // CapEx → OpEx transition
+    const capP = subProgress(p, 0.85, 1);
+    if(capP > 0) {
+      ctx.globalAlpha = ease.out(capP);
+      ctx.font = '600 14px Inter';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#F97316';
+      ctx.fillText('CapEx → OpEx: from buying cars to ride-sharing', cx, lineY + H*0.2);
+      ctx.globalAlpha = 1;
+    }
+  }
+});
+
+/* ── Scene 4: Traditional vs Cloud ── */
+scenes.push({
+  title: 'Traditional vs Cloud',
+  subtitle: 'Own a library or carry a card to the world\'s largest?',
+  bg: '#0F172A',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H/2;
+
+    // Divider
+    const divP = ease.out(subProgress(p, 0, 0.15));
+    const divX = lerp(cx, cx - W*0.15 * ease.out(subProgress(p, 0.7, 1)), 1);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(divX, cy - H*0.35*divP);
+    ctx.lineTo(divX, cy + H*0.35*divP);
+    ctx.stroke();
+
+    // LEFT: Traditional
+    const leftP = ease.out(subProgress(p, 0.05, 0.4));
+    if(leftP > 0) {
+      const lx = divX/2, ly = cy;
+      ctx.globalAlpha = leftP;
+
+      // Red tint area
+      ctx.fillStyle = 'rgba(220,38,38,0.06)';
+      ctx.fillRect(0, cy-H*0.35, divX, H*0.7);
+
+      // Server room
+      const rackW = Math.min(W*0.06, 45), rackH = Math.min(H*0.2, 100);
+      for(let i=-1;i<=1;i++) {
+        drawServer(ctx, lx + i*rackW*1.5, ly - 30, rackW, rackH*0.3, '#1E293B', '#EF4444');
+      }
+
+      // Dollar signs stacking
+      const dollarP = subProgress(p, 0.2, 0.5);
+      if(dollarP > 0) {
+        ctx.font = `700 ${18 + dollarP*10}px Inter`;
+        ctx.fillStyle = '#DC2626';
+        ctx.textAlign = 'center';
+        ctx.fillText('$$$', lx, ly + 50);
+        ctx.font = '500 11px Inter';
+        ctx.fillStyle = 'rgba(220,38,38,0.7)';
+        ctx.fillText('CapEx: Millions upfront', lx, ly + 72);
+        ctx.fillText('12-18 months to deploy', lx, ly + 88);
+      }
+
+      // Heat waves
+      for(let i=0;i<3;i++) {
+        const wave = (dt*0.5 + i*0.3) % 1;
+        ctx.strokeStyle = `rgba(220,38,38,${0.2*(1-wave)})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(lx, ly-60, 30 + wave*40, -Math.PI*0.8, -Math.PI*0.2);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // RIGHT: Cloud
+    const rightP = ease.out(subProgress(p, 0.15, 0.5));
+    if(rightP > 0) {
+      const rx = divX + (W - divX)/2, ry = cy;
+      ctx.globalAlpha = rightP;
+
+      // Blue tint area
+      ctx.fillStyle = 'rgba(37,99,235,0.06)';
+      ctx.fillRect(divX, cy-H*0.35, W-divX, H*0.7);
+
+      // Cloud + laptop
+      drawCloud(ctx, rx, ry - 40, Math.min(W,H)*0.18, Math.min(W,H)*0.1, 'rgba(37,99,235,0.4)', rightP);
+      drawLaptop(ctx, rx, ry + 30, Math.min(W,H)*0.08, '#1E293B');
+
+      // Scaling arrows
+      const scaleP = subProgress(p, 0.3, 0.6);
+      if(scaleP > 0) {
+        const ap = ease.elastic(scaleP);
+        const arrowX = rx + 50;
+        drawArrow(ctx, arrowX, ry-10, arrowX, ry - 10 - 40*ap, '#22D3EE', 2, 8);
+        drawArrow(ctx, arrowX+15, ry-10, arrowX+15, ry - 10 + 20*ap, '#22D3EE', 2, 8);
+      }
+
+      // Pay per use
+      const payP = subProgress(p, 0.35, 0.6);
+      if(payP > 0) {
+        ctx.font = '700 16px Inter';
+        ctx.fillStyle = '#10B981';
+        ctx.textAlign = 'center';
+        ctx.fillText('Pay-per-use', rx, ry + 80);
+        ctx.font = '500 11px Inter';
+        ctx.fillStyle = 'rgba(16,185,129,0.7)';
+        ctx.fillText('Deploy in minutes', rx, ry + 98);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Cloud wins - divider slides left
+    const winP = subProgress(p, 0.75, 1);
+    if(winP > 0) {
+      ctx.globalAlpha = ease.out(winP);
+      ctx.font = '600 15px Inter';
+      ctx.fillStyle = '#16A34A';
+      ctx.textAlign = 'center';
+      ctx.fillText('Cloud reduces IT costs by 30-50%', W/2 + W*0.1, cy + H*0.35);
+      ctx.globalAlpha = 1;
+    }
+  }
+});
+
+/* ── Scene 5: Architecture Layers ── */
+scenes.push({
+  title: 'Inside the Cloud',
+  subtitle: 'Five layers powering everything',
+  bg: '#0F172A',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H/2;
+    const layers = [
+      { name: 'Physical Infrastructure', color: '#334155', icon: 'server' },
+      { name: 'Virtualization', color: '#6366F1', icon: 'vm' },
+      { name: 'Management', color: '#8B5CF6', icon: 'gear' },
+      { name: 'Network', color: '#38BDF8', icon: 'net' },
+      { name: 'Front-End', color: '#22D3EE', icon: 'device' },
+    ];
+    const layerH = Math.min(H*0.1, 55);
+    const layerW = Math.min(W*0.5, 350);
+    const totalH = layers.length * layerH * 1.2;
+    const startY = cy + totalH/2 - layerH/2;
+
+    layers.forEach((layer, i) => {
+      const lp = ease.outBack(subProgress(p, 0.05 + i*0.12, 0.25 + i*0.12));
+      if(lp <= 0) return;
+
+      const ly = startY - i * layerH * 1.2;
+      const lw = layerW * (1 - i*0.04);
+
+      ctx.globalAlpha = lp;
+
+      // Layer background
+      ctx.fillStyle = layer.color;
+      ctx.globalAlpha = lp * 0.25;
+      ctx.beginPath();
+      ctx.roundRect(cx - lw/2, ly - layerH/2, lw, layerH, 8);
+      ctx.fill();
+
+      // Layer border
+      ctx.strokeStyle = layer.color;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = lp * 0.6;
+      ctx.beginPath();
+      ctx.roundRect(cx - lw/2, ly - layerH/2, lw, layerH, 8);
+      ctx.stroke();
+
+      ctx.globalAlpha = lp;
+
+      // Layer name
+      ctx.font = '600 12px Inter';
+      ctx.fillStyle = layer.color;
+      ctx.textAlign = 'left';
+      ctx.fillText(layer.name, cx - lw/2 + 15, ly + 4);
+
+      // Icons per layer
+      const iconX = cx + lw/2 - 50;
+      if(layer.icon === 'server') {
+        drawServer(ctx, iconX, ly, 28, 16, '#1E293B', '#38BDF8');
+        drawServer(ctx, iconX-35, ly, 28, 16, '#1E293B', '#38BDF8');
+      } else if(layer.icon === 'vm') {
+        // VMs splitting
+        const split = Math.sin(dt*2)*0.5+0.5;
+        ctx.fillStyle = 'rgba(99,102,241,0.5)';
+        ctx.fillRect(iconX-18-split*8, ly-8, 16, 16);
+        ctx.fillRect(iconX+2+split*8, ly-8, 16, 16);
+        ctx.strokeStyle = '#A78BFA';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3,3]);
+        ctx.strokeRect(iconX-18-split*8, ly-8, 16, 16);
+        ctx.strokeRect(iconX+2+split*8, ly-8, 16, 16);
+        ctx.setLineDash([]);
+      } else if(layer.icon === 'gear') {
+        drawGear(ctx, iconX, ly, 12, 9, 8, dt, 'rgba(139,92,246,0.7)');
+        drawGear(ctx, iconX-28, ly, 10, 7, 6, -dt*1.3, 'rgba(139,92,246,0.5)');
+      } else if(layer.icon === 'net') {
+        for(let n=0;n<3;n++) {
+          const nx = iconX - 20 + n*20;
+          ctx.fillStyle = '#38BDF8';
+          ctx.beginPath();
+          ctx.arc(nx, ly, 3, 0, Math.PI*2);
+          ctx.fill();
+          if(n<2) drawNetworkLine(ctx, nx+3, ly, nx+17, ly, 1, 'rgba(56,189,248,0.4)', 1);
+        }
+      } else {
+        // Devices
+        drawLaptop(ctx, iconX-15, ly, 22, '#1E293B');
+        ctx.fillStyle = 'rgba(34,211,238,0.4)';
+        ctx.fillRect(iconX+10, ly-8, 10, 16);
+      }
+      ctx.globalAlpha = 1;
+    });
+
+    // Pulse effect when all layers built
+    const pulseP = subProgress(p, 0.75, 1);
+    if(pulseP > 0) {
+      const pulse = Math.sin(dt*3)*0.5+0.5;
+      drawGlow(ctx, cx, cy, Math.min(W,H)*0.3 + pulse*20, '#38BDF8', 0.08*pulseP);
+    }
+  }
+});
+
+/* ── Scene 6: NIST 5 Characteristics ── */
+scenes.push({
+  title: 'Five Essential Traits',
+  subtitle: 'NIST\'s definition of true cloud computing',
+  bg: '#1E1B4B',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H*0.45;
+    const radius = Math.min(W, H) * 0.22;
+
+    const chars = [
+      { name: 'On-Demand', short: 'Self-Service', color: '#34D399' },
+      { name: 'Broad', short: 'Network Access', color: '#38BDF8' },
+      { name: 'Resource', short: 'Pooling', color: '#818CF8' },
+      { name: 'Rapid', short: 'Elasticity', color: '#F59E0B' },
+      { name: 'Measured', short: 'Service', color: '#F472B6' },
+    ];
+
+    chars.forEach((ch, i) => {
+      const angle = -Math.PI/2 + (i / chars.length) * Math.PI * 2;
+      const nx = cx + Math.cos(angle) * radius;
+      const ny = cy + Math.sin(angle) * radius;
+
+      const nodeP = ease.outBack(subProgress(p, 0.05 + i*0.1, 0.25 + i*0.1));
+      if(nodeP <= 0) return;
+
+      ctx.globalAlpha = nodeP;
+
+      // Node glow
+      drawGlow(ctx, nx, ny, 45, ch.color, 0.3);
+
+      // Node circle
+      ctx.fillStyle = ch.color;
+      ctx.globalAlpha = nodeP * 0.2;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 32 * nodeP, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = nodeP;
+      ctx.strokeStyle = ch.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 32 * nodeP, 0, Math.PI*2);
+      ctx.stroke();
+
+      // Icon animations per characteristic
+      if(i === 0) {
+        // Vending machine: small box dropping
+        const drop = (dt*1.5) % 1;
+        ctx.fillStyle = ch.color;
+        ctx.fillRect(nx-8, ny-12, 16, 18);
+        ctx.fillStyle = '#1E1B4B';
+        ctx.fillRect(nx-5, ny-9, 10, 10);
+        ctx.fillStyle = ch.color;
+        ctx.fillRect(nx-3, ny+2+drop*8, 6, 5);
+      } else if(i === 1) {
+        // Radio tower waves
+        ctx.strokeStyle = ch.color;
+        ctx.lineWidth = 2;
+        ctx.fillStyle = ch.color;
+        ctx.beginPath();
+        ctx.moveTo(nx, ny-14);
+        ctx.lineTo(nx-6, ny+10);
+        ctx.lineTo(nx+6, ny+10);
+        ctx.closePath();
+        ctx.fill();
+        for(let w=1;w<=3;w++) {
+          const wave = (dt*0.8+w*0.2) % 1;
+          ctx.globalAlpha = nodeP*(1-wave)*0.6;
+          ctx.beginPath();
+          ctx.arc(nx, ny-8, 12+w*10*wave, -Math.PI*0.7, -Math.PI*0.3);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(nx, ny-8, 12+w*10*wave, -Math.PI*0.7+Math.PI, -Math.PI*0.3+Math.PI);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = nodeP;
+      } else if(i === 2) {
+        // Pool - overlapping circles
+        const colors = ['rgba(129,140,248,0.4)', 'rgba(129,140,248,0.3)', 'rgba(129,140,248,0.2)'];
+        colors.forEach((c, ci) => {
+          ctx.fillStyle = c;
+          ctx.beginPath();
+          ctx.arc(nx-8+ci*8, ny+ci*3-5, 12, 0, Math.PI*2);
+          ctx.fill();
+        });
+        // Users
+        ctx.fillStyle = ch.color;
+        [-8, 0, 8].forEach(ox => {
+          ctx.beginPath();
+          ctx.arc(nx+ox, ny-10, 3, 0, Math.PI*2);
+          ctx.fill();
+        });
+      } else if(i === 3) {
+        // Rubber band stretch
+        const stretch = Math.sin(dt*2)*0.4+0.6;
+        ctx.strokeStyle = ch.color;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.ellipse(nx, ny, 8+stretch*12, 15-stretch*5, 0, 0, Math.PI*2);
+        ctx.stroke();
+        // Arrow
+        drawArrow(ctx, nx+8+stretch*12, ny, nx+14+stretch*12, ny, ch.color, 2, 5);
+      } else {
+        // Meter spinning
+        ctx.strokeStyle = ch.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(nx, ny, 14, Math.PI, 0);
+        ctx.stroke();
+        // Needle
+        const needleAngle = Math.PI + dt*2 % Math.PI;
+        ctx.strokeStyle = ch.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(nx, ny);
+        ctx.lineTo(nx+Math.cos(needleAngle)*12, ny+Math.sin(needleAngle)*12);
+        ctx.stroke();
+        ctx.fillStyle = ch.color;
+        ctx.font = '600 7px Inter';
+        ctx.textAlign = 'center';
+        ctx.fillText('$', nx-10, ny-3);
+        ctx.fillText('$$$', nx+8, ny-3);
+      }
+
+      // Labels
+      ctx.font = '700 11px Inter';
+      ctx.fillStyle = ch.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(ch.name, nx, ny + 42);
+      ctx.font = '400 10px Inter';
+      ctx.fillStyle = 'rgba(248,250,252,0.5)';
+      ctx.fillText(ch.short, nx, ny + 55);
+      ctx.globalAlpha = 1;
+    });
+
+    // Pentagon lines connecting all nodes
+    const lineP = ease.out(subProgress(p, 0.6, 0.8));
+    if(lineP > 0) {
+      ctx.strokeStyle = 'rgba(129,140,248,0.2)';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = lineP;
+      ctx.beginPath();
+      chars.forEach((ch, i) => {
+        const angle = -Math.PI/2 + (i / chars.length) * Math.PI * 2;
+        const nx = cx + Math.cos(angle) * radius;
+        const ny = cy + Math.sin(angle) * radius;
+        if(i===0) ctx.moveTo(nx,ny); else ctx.lineTo(nx,ny);
+      });
+      ctx.closePath();
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    // Center pulse
+    const centerP = subProgress(p, 0.8, 1);
+    if(centerP > 0) {
+      const pulse = Math.sin(dt*4)*0.3+0.7;
+      drawGlow(ctx, cx, cy, radius*0.4*pulse, '#818CF8', 0.15*centerP);
+    }
+  }
+});
+
+/* ── Scene 7: Deployment Models ── */
+scenes.push({
+  title: 'Deployment Models',
+  subtitle: 'Four ways to organize your cloud',
+  bg: '#0D1F17',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H*0.45;
+    const qw = Math.min(W*0.35, 260), qh = Math.min(H*0.28, 180);
+    const gap = 20;
+
+    const quads = [
+      { name: 'Public Cloud', sub: 'The shared bus', color: '#2563EB', pos: [-1, -1] },
+      { name: 'Private Cloud', sub: 'Your own car', color: '#7C3AED', pos: [1, -1] },
+      { name: 'Hybrid Cloud', sub: 'Best of both', color: '#F59E0B', pos: [-1, 1] },
+      { name: 'Community Cloud', sub: 'Shared office', color: '#06B6D4', pos: [1, 1] },
+    ];
+
+    quads.forEach((q, i) => {
+      const qp = ease.outBack(subProgress(p, 0.02 + i*0.1, 0.28 + i*0.1));
+      if(qp <= 0) return;
+
+      const qx = cx + q.pos[0] * (qw/2 + gap/2);
+      const qy = cy + q.pos[1] * (qh/2 + gap/2);
+
+      ctx.globalAlpha = qp;
+
+      // Quadrant bg
+      ctx.fillStyle = q.color;
+      ctx.globalAlpha = qp * 0.08;
+      ctx.beginPath();
+      ctx.roundRect(qx - qw/2, qy - qh/2, qw, qh, 12);
+      ctx.fill();
+      ctx.globalAlpha = qp;
+
+      // Border
+      ctx.strokeStyle = q.color;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = qp * 0.4;
+      ctx.beginPath();
+      ctx.roundRect(qx - qw/2, qy - qh/2, qw, qh, 12);
+      ctx.stroke();
+      ctx.globalAlpha = qp;
+
+      // Icons per quadrant
+      const iconY = qy - 5;
+      if(i === 0) {
+        // Globe + orbiting dots
+        drawGlobe(ctx, qx, iconY - 10, 25, dt*0.5, 'rgba(37,99,235,0.5)');
+        // Bus shape
+        ctx.fillStyle = 'rgba(37,99,235,0.5)';
+        ctx.beginPath();
+        ctx.roundRect(qx-22, iconY+22, 44, 18, 5);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+        for(let w=0;w<3;w++) ctx.fillRect(qx-16+w*14, iconY+24, 10, 8);
+        // Wheels
+        ctx.fillStyle = '#0D1F17';
+        ctx.beginPath();
+        ctx.arc(qx-12, iconY+42, 4, 0, Math.PI*2);
+        ctx.arc(qx+12, iconY+42, 4, 0, Math.PI*2);
+        ctx.fill();
+      } else if(i === 1) {
+        // Lock icon
+        ctx.strokeStyle = q.color;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.arc(qx, iconY-15, 12, Math.PI, 0);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(124,58,237,0.4)';
+        ctx.beginPath();
+        ctx.roundRect(qx-16, iconY-5, 32, 24, 4);
+        ctx.fill();
+        ctx.fillStyle = q.color;
+        ctx.beginPath();
+        ctx.arc(qx, iconY+5, 4, 0, Math.PI*2);
+        ctx.fill();
+        // Key
+        ctx.fillRect(qx-1, iconY+9, 2, 6);
+      } else if(i === 2) {
+        // Bridge: building + cloud connected
+        ctx.fillStyle = 'rgba(245,158,11,0.4)';
+        ctx.fillRect(qx-35, iconY-5, 22, 28);
+        for(let w=0;w<2;w++) for(let h2=0;h2<3;h2++) {
+          ctx.fillStyle = 'rgba(245,158,11,0.7)';
+          ctx.fillRect(qx-33+w*10, iconY-2+h2*8, 6, 5);
+        }
+        drawCloud(ctx, qx+25, iconY, 35, 20, 'rgba(245,158,11,0.35)', qp);
+        // Bridge line
+        ctx.strokeStyle = q.color;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4,3]);
+        ctx.beginPath();
+        ctx.moveTo(qx-12, iconY+8);
+        ctx.lineTo(qx+8, iconY+2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        // 80% badge
+        const badgeP = subProgress(p, 0.5, 0.7);
+        if(badgeP > 0) {
+          ctx.globalAlpha = qp*badgeP;
+          ctx.fillStyle = q.color;
+          ctx.font = '700 10px Inter';
+          ctx.textAlign = 'center';
+          ctx.fillText('80% of enterprises', qx, qy + qh/2 - 28);
+          ctx.globalAlpha = qp;
+        }
+      } else {
+        // Clustered buildings
+        for(let b=0;b<3;b++) {
+          const bx = qx - 25 + b*25;
+          const bh2 = 20 + b*5;
+          ctx.fillStyle = 'rgba(6,182,212,0.3)';
+          ctx.fillRect(bx-8, iconY+15-bh2, 16, bh2);
+          ctx.strokeStyle = 'rgba(6,182,212,0.5)';
+          ctx.strokeRect(bx-8, iconY+15-bh2, 16, bh2);
+        }
+        // Shared fence
+        ctx.strokeStyle = 'rgba(6,182,212,0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3,3]);
+        ctx.beginPath();
+        ctx.roundRect(qx-42, iconY-18, 84, 45, 6);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Labels
+      ctx.font = '700 13px Inter';
+      ctx.fillStyle = q.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(q.name, qx, qy + qh/2 - 12);
+
+      ctx.globalAlpha = 1;
+    });
+  }
+});
+
+/* ── Scene 8: Service Models ── */
+scenes.push({
+  title: 'IaaS · PaaS · SaaS',
+  subtitle: 'From building blocks to delivery pizza',
+  bg: '#1A1409',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H*0.42;
+    const models = [
+      { name: 'IaaS', sub: 'You build', color: '#2563EB', userLayers: 5, example: 'AWS EC2' },
+      { name: 'PaaS', sub: 'You code', color: '#8B5CF6', userLayers: 2, example: 'Heroku / Vercel' },
+      { name: 'SaaS', sub: 'You use', color: '#10B981', userLayers: 0, example: 'Gmail / Slack' },
+    ];
+    const allLayers = ['Network','Storage','Servers','Virtual','OS','Middle','Runtime','Data','Apps'];
+    const colW = Math.min(W*0.2, 140);
+    const colH = Math.min(H*0.45, 300);
+    const layerH = colH / allLayers.length;
+    const totalW = models.length * colW + (models.length-1)*30;
+    const startX = cx - totalW/2 + colW/2;
+
+    models.forEach((model, mi) => {
+      const mp = ease.out(subProgress(p, 0.02+mi*0.08, 0.35+mi*0.08));
+      if(mp <= 0) return;
+
+      const mx = startX + mi * (colW + 30);
+      const myTop = cy - colH/2;
+
+      ctx.globalAlpha = mp;
+
+      // Column background
+      ctx.fillStyle = 'rgba(255,255,255,0.03)';
+      ctx.beginPath();
+      ctx.roundRect(mx-colW/2, myTop, colW, colH, 8);
+      ctx.fill();
+
+      // Layers
+      allLayers.forEach((layer, li) => {
+        const ly = myTop + li*layerH;
+        const isProvider = li < (allLayers.length - model.userLayers);
+        const layerP = ease.out(subProgress(mp, li*0.08, li*0.08+0.5));
+
+        ctx.fillStyle = isProvider ? `${model.color}33` : 'rgba(249,115,22,0.2)';
+        ctx.globalAlpha = mp * layerP;
+        ctx.fillRect(mx-colW/2+2, ly+1, colW-4, layerH-2);
+
+        // Layer text
+        ctx.font = '500 9px Inter';
+        ctx.fillStyle = isProvider ? model.color : '#F97316';
+        ctx.textAlign = 'center';
+        ctx.fillText(layer, mx, ly+layerH/2+3);
+      });
+
+      ctx.globalAlpha = mp;
+
+      // Model name
+      ctx.font = '800 18px Inter';
+      ctx.fillStyle = model.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(model.name, mx, myTop - 20);
+
+      // Subtitle
+      ctx.font = '400 11px Inter';
+      ctx.fillStyle = 'rgba(248,250,252,0.5)';
+      ctx.fillText(model.sub, mx, myTop - 6);
+
+      // Example
+      ctx.font = '500 10px Inter';
+      ctx.fillStyle = 'rgba(248,250,252,0.4)';
+      ctx.fillText(model.example, mx, myTop + colH + 18);
+
+      // Legend
+      if(mi === 0) {
+        ctx.font = '500 9px Inter';
+        ctx.fillStyle = model.color;
+        ctx.textAlign = 'left';
+        ctx.fillText('■ Provider', mx-colW/2, myTop+colH+35);
+        ctx.fillStyle = '#F97316';
+        ctx.fillText('■ You', mx-colW/2+65, myTop+colH+35);
+      }
+
+      ctx.globalAlpha = 1;
+    });
+
+    // Pizza analogy strip at bottom
+    const pizzaP = subProgress(p, 0.5, 0.85);
+    if(pizzaP > 0) {
+      const pizzas = [
+        { label: 'Homemade', icon: '🏠', effort: 1 },
+        { label: 'IaaS', icon: '🧱', effort: 0.75 },
+        { label: 'PaaS', icon: '📦', effort: 0.35 },
+        { label: 'SaaS', icon: '🍕', effort: 0.05 },
+      ];
+      const stripY = cy + colH/2 + 55;
+      const stripW = Math.min(W*0.7, 500);
+      const panelW = stripW / pizzas.length;
+      const stripX = cx - stripW/2;
+
+      pizzas.forEach((pz, pi) => {
+        const pp = ease.outBack(subProgress(pizzaP, pi*0.15, pi*0.15+0.5));
+        if(pp <= 0) return;
+        const px = stripX + pi*panelW + panelW/2;
+
+        ctx.globalAlpha = pp;
+        // Effort bar
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(px-20, stripY, 40, 30);
+        ctx.fillStyle = pi === 0 ? '#F97316' : pi === 3 ? '#10B981' : '#3B82F6';
+        ctx.fillRect(px-20, stripY + 30*(1-pz.effort), 40, 30*pz.effort);
+        // Label
+        ctx.font = '600 10px Inter';
+        ctx.fillStyle = '#F8FAFC';
+        ctx.textAlign = 'center';
+        ctx.fillText(pz.label, px, stripY + 45);
+        ctx.globalAlpha = 1;
+      });
+    }
+  }
+});
+
+/* ── Scene 9: Pros & Cons Balance Scale ── */
+scenes.push({
+  title: 'Weighing the Cloud',
+  subtitle: 'Powerful advantages, real limitations',
+  bg: '#0F1210',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H*0.45;
+    const scaleSize = Math.min(W, H) * 0.55;
+
+    // Balance scale
+    const tiltTarget = -0.12; // Tilts toward advantages
+    const tilt = tiltTarget * ease.out(subProgress(p, 0.3, 0.8));
+    drawBalanceScale(ctx, cx, cy, scaleSize, tilt, '#64748B');
+
+    // Advantages (left side)
+    const pros = [
+      { label: 'Cost Savings', color: '#16A34A' },
+      { label: 'Scalability', color: '#22C55E' },
+      { label: 'Accessibility', color: '#34D399' },
+      { label: 'Disaster Recovery', color: '#4ADE80' },
+      { label: 'Speed & Agility', color: '#6EE7B7' },
+      { label: 'Auto-Updates', color: '#86EFAC' },
+      { label: 'Sustainability', color: '#A7F3D0' },
+    ];
+
+    const beamW = scaleSize * 0.4;
+    const proX = cx - beamW * Math.cos(tilt);
+    const proBaseY = cy - scaleSize*0.275 - beamW*Math.sin(tilt) + scaleSize*0.2;
+
+    pros.forEach((pro, i) => {
+      const pp = ease.outBack(subProgress(p, 0.08+i*0.05, 0.28+i*0.05));
+      if(pp <= 0) return;
+      const py = proBaseY - i*22;
+      ctx.globalAlpha = pp;
+      // Green arrow
+      ctx.fillStyle = pro.color;
+      const arrowX = proX - 55;
+      ctx.beginPath();
+      ctx.moveTo(arrowX, py+5);
+      ctx.lineTo(arrowX+8, py-5);
+      ctx.lineTo(arrowX+16, py+5);
+      ctx.closePath();
+      ctx.fill();
+      // Label
+      ctx.font = '500 11px Inter';
+      ctx.fillStyle = pro.color;
+      ctx.textAlign = 'left';
+      ctx.fillText(pro.label, arrowX + 22, py + 3);
+      ctx.globalAlpha = 1;
+    });
+
+    // Limitations (right side)
+    const cons = [
+      { label: 'Internet Needed', color: '#EA580C' },
+      { label: 'Security Risks', color: '#F97316' },
+      { label: 'Vendor Lock-In', color: '#FB923C' },
+      { label: 'Limited Control', color: '#FDBA74' },
+      { label: 'Compliance', color: '#FED7AA' },
+      { label: 'Hidden Costs', color: '#FFEDD5' },
+    ];
+
+    const conX = cx + beamW * Math.cos(tilt);
+    const conBaseY = cy - scaleSize*0.275 + beamW*Math.sin(tilt) + scaleSize*0.2;
+
+    cons.forEach((con, i) => {
+      const cp = ease.outBack(subProgress(p, 0.15+i*0.06, 0.35+i*0.06));
+      if(cp <= 0) return;
+      const cy2 = conBaseY - i*22;
+      ctx.globalAlpha = cp;
+      // Warning triangle
+      ctx.fillStyle = con.color;
+      const triX = conX - 55;
+      ctx.beginPath();
+      ctx.moveTo(triX+8, cy2-5);
+      ctx.lineTo(triX+16, cy2+5);
+      ctx.lineTo(triX, cy2+5);
+      ctx.closePath();
+      ctx.fill();
+      // Label
+      ctx.font = '500 11px Inter';
+      ctx.fillStyle = con.color;
+      ctx.textAlign = 'left';
+      ctx.fillText(con.label, triX + 22, cy2 + 3);
+      ctx.globalAlpha = 1;
+    });
+
+    // Stats
+    const statP = subProgress(p, 0.8, 1);
+    if(statP > 0) {
+      ctx.globalAlpha = ease.out(statP);
+      ctx.font = '600 14px Inter';
+      ctx.fillStyle = '#16A34A';
+      ctx.textAlign = 'center';
+      ctx.fillText('20-30% average cost savings', cx, cy + scaleSize*0.45);
+      ctx.globalAlpha = 1;
+    }
+  }
+});
+
+/* ── Scene 10: Cloud Platforms ── */
+scenes.push({
+  title: 'The Major Players',
+  subtitle: 'AWS · Azure · GCP · and more',
+  bg: '#0F172A',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H*0.4;
+    const globeR = Math.min(W,H)*0.16;
+
+    // Globe
+    const globeP = ease.out(subProgress(p, 0, 0.25));
+    ctx.globalAlpha = globeP;
+    drawGlobe(ctx, cx, cy, globeR * globeP, dt*0.3, 'rgba(59,130,246,0.3)');
+
+    // Data center dots on globe
+    if(globeP > 0.5) {
+      const dotAlpha = (globeP-0.5)*2;
+      ctx.globalAlpha = dotAlpha * 0.6;
+      for(let i=0;i<12;i++) {
+        const a = dt*0.2 + i*Math.PI*2/12;
+        const px = cx + Math.cos(a)*globeR*0.7*(0.3+0.7*Math.abs(Math.sin(a+i)));
+        const py = cy + Math.sin(a*0.7)*globeR*0.5;
+        ctx.fillStyle = '#3B82F6';
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    // Pie chart
+    const pieP = ease.out(subProgress(p, 0.2, 0.65));
+    if(pieP > 0) {
+      const pieR = Math.min(W,H)*0.13;
+      const pieX = cx, pieY = cy;
+      ctx.globalAlpha = pieP * 0.7;
+      drawPieChart(ctx, pieX, pieY, pieR * pieP, [
+        { value: 31, color: '#FF9900', label: 'AWS 31%' },
+        { value: 25, color: '#0078D4', label: 'Azure 25%' },
+        { value: 11, color: '#4285F4', label: 'GCP 11%' },
+        { value: 33, color: '#334155', label: 'Others 33%' },
+      ], pieP);
+      ctx.globalAlpha = 1;
+    }
+
+    // Platform cards
+    const platforms = [
+      { name: 'AWS', desc: '200+ services', color: '#FF9900', share: '31%' },
+      { name: 'Azure', desc: 'Enterprise leader', color: '#0078D4', share: '25%' },
+      { name: 'GCP', desc: 'AI & Data', color: '#4285F4', share: '11%' },
+      { name: 'Vercel', desc: '30s deploys', color: '#F8FAFC', share: '' },
+    ];
+
+    const cardW = Math.min(W*0.16, 120);
+    const cardH = 60;
+    const totalCards = platforms.length * cardW + (platforms.length-1)*15;
+    const cardsX = cx - totalCards/2 + cardW/2;
+    const cardsY = cy + globeR + 50;
+
+    platforms.forEach((plat, i) => {
+      const cp = ease.outBack(subProgress(p, 0.35+i*0.08, 0.55+i*0.08));
+      if(cp <= 0) return;
+      const px = cardsX + i*(cardW+15);
+
+      ctx.globalAlpha = cp;
+
+      // Card
+      ctx.fillStyle = `${plat.color}15`;
+      ctx.strokeStyle = `${plat.color}40`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(px-cardW/2, cardsY-cardH/2, cardW, cardH, 8);
+      ctx.fill();
+      ctx.stroke();
+
+      // Name
+      ctx.font = '700 15px Inter';
+      ctx.fillStyle = plat.color;
+      ctx.textAlign = 'center';
+      ctx.fillText(plat.name, px, cardsY - 5);
+
+      // Desc
+      ctx.font = '400 10px Inter';
+      ctx.fillStyle = 'rgba(248,250,252,0.5)';
+      ctx.fillText(plat.desc, px, cardsY + 14);
+
+      ctx.globalAlpha = 1;
+    });
+  }
+});
+
+/* ── Scene 11: Hands-On Deploy ── */
+scenes.push({
+  title: 'Deploy in Action',
+  subtitle: 'From code to live in 30 seconds',
+  bg: '#18181B',
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H*0.45;
+
+    // Code editor background
+    const editorP = ease.out(subProgress(p, 0, 0.2));
+    const edW = Math.min(W*0.65, 500), edH = Math.min(H*0.35, 200);
+    ctx.globalAlpha = editorP;
+    ctx.fillStyle = '#1E1E2E';
+    ctx.beginPath();
+    ctx.roundRect(cx-edW/2, cy-edH/2-30, edW, edH, 10);
+    ctx.fill();
+    // Title bar dots
+    ['#EF4444','#F59E0B','#22C55E'].forEach((c,i) => {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(cx-edW/2+18+i*16, cy-edH/2-18, 5, 0, Math.PI*2);
+      ctx.fill();
+    });
+
+    // Code lines
+    const codeP = subProgress(p, 0.1, 0.35);
+    const codeLines = [
+      { text: 'export default function App() {', color: '#C792EA' },
+      { text: '  return <h1>Hello Cloud!</h1>', color: '#82AAFF' },
+      { text: '}', color: '#C792EA' },
+      { text: '', color: '' },
+      { text: '$ git push origin main', color: '#A3E635' },
+    ];
+    codeLines.forEach((line, i) => {
+      const lp = subProgress(codeP, i*0.15, i*0.15+0.4);
+      if(lp <= 0) return;
+      const charCount = Math.floor(line.text.length * lp);
+      ctx.font = '500 13px monospace';
+      ctx.fillStyle = line.color;
+      ctx.textAlign = 'left';
+      ctx.fillText(line.text.slice(0, charCount), cx-edW/2+15, cy-edH/2+20+i*22);
+      // Cursor
+      if(lp < 1 && lp > 0) {
+        const cursorX = cx-edW/2+15+ctx.measureText(line.text.slice(0,charCount)).width;
+        ctx.fillStyle = (dt*3%1 > 0.5) ? '#F8FAFC' : 'transparent';
+        ctx.fillRect(cursorX, cy-edH/2+7+i*22, 8, 16);
+      }
+    });
+
+    // Pipeline chain
+    const pipeP = subProgress(p, 0.35, 0.7);
+    if(pipeP > 0) {
+      const steps = [
+        { label: 'Code', color: '#82AAFF' },
+        { label: 'Git', color: '#F97316' },
+        { label: 'Build', color: '#A78BFA' },
+        { label: 'Deploy', color: '#22D3EE' },
+        { label: 'Live!', color: '#A3E635' },
+      ];
+      const pipeY = cy + edH/2 + 20;
+      const pipeW = Math.min(W*0.6, 450);
+      const stepW = pipeW / steps.length;
+      const pipeX = cx - pipeW/2;
+
+      steps.forEach((step, i) => {
+        const sp = ease.outBack(subProgress(pipeP, i*0.12, i*0.12+0.4));
+        if(sp <= 0) return;
+        const sx = pipeX + i*stepW + stepW/2;
+
+        ctx.globalAlpha = sp;
+
+        // Circle
+        ctx.fillStyle = step.color;
+        ctx.globalAlpha = sp * 0.2;
+        ctx.beginPath();
+        ctx.arc(sx, pipeY, 18*sp, 0, Math.PI*2);
+        ctx.fill();
+        ctx.globalAlpha = sp;
+        ctx.strokeStyle = step.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(sx, pipeY, 18*sp, 0, Math.PI*2);
+        ctx.stroke();
+
+        // Gear for Build step
+        if(i === 2) {
+          drawGear(ctx, sx, pipeY, 10, 7, 6, dt, step.color);
+        }
+
+        // Label
+        ctx.font = '600 10px Inter';
+        ctx.fillStyle = step.color;
+        ctx.textAlign = 'center';
+        ctx.fillText(step.label, sx, pipeY + 32);
+
+        // Arrow to next
+        if(i < steps.length - 1) {
+          const nextX = pipeX + (i+1)*stepW + stepW/2;
+          drawArrow(ctx, sx+20, pipeY, nextX-20, pipeY, `${step.color}60`, 1.5, 6);
+        }
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    // Live URL
+    const liveP = subProgress(p, 0.65, 0.85);
+    if(liveP > 0) {
+      ctx.globalAlpha = ease.out(liveP);
+      ctx.font = '600 16px monospace';
+      ctx.fillStyle = '#A3E635';
+      ctx.textAlign = 'center';
+      ctx.fillText('✓ myapp.vercel.app', cx, cy + edH/2 + 85);
+      ctx.globalAlpha = 1;
+    }
+
+    // Confetti burst
+    const confP = subProgress(p, 0.82, 1);
+    if(confP > 0) {
+      const colors = ['#A3E635','#22D3EE','#F59E0B','#F472B6','#818CF8'];
+      for(let i=0;i<30;i++) {
+        const angle = (i/30)*Math.PI*2 + confP*0.5;
+        const dist = confP * 120 * (0.5 + (i%3)*0.25);
+        const px = cx + Math.cos(angle)*dist;
+        const py = cy + edH/2 + 85 + Math.sin(angle)*dist*0.5 - confP*40;
+        ctx.globalAlpha = (1-confP)*0.8;
+        ctx.fillStyle = colors[i%colors.length];
+        ctx.fillRect(px-2, py-2, 4+i%3, 4+i%2);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+});
+
+/* ── Scene 12: Closing ── */
+scenes.push({
+  title: 'Start Building',
+  subtitle: 'Cloud Computing — the present and the future',
+  bg: '#0B1120',
+  particles: new ParticleSystem(150),
+  init() {
+    // Particles come from edges, converge to cloud
+    this.particles.particles.forEach((p, i) => {
+      const side = i % 4;
+      p.x = side===0 ? -50 : side===1 ? W+50 : Math.random()*W;
+      p.y = side===2 ? -50 : side===3 ? H+50 : Math.random()*H;
+      p.color = ['#3B82F6','#60A5FA','#F59E0B','#22D3EE','#A78BFA','#10B981'][i%6];
+    });
+    this.particles.setTargetCloud(W/2, H*0.38, W*0.4, H*0.25);
+  },
+  draw(ctx, p, dt) {
+    const cx = W/2, cy = H*0.38;
+
+    // Converging particles
+    const convP = ease.inOut(subProgress(p, 0, 0.6));
+    this.particles.draw(ctx, convP, dt*0.3);
+
+    // Cloud glow grows
+    const glowP = ease.out(subProgress(p, 0.3, 0.7));
+    if(glowP > 0) {
+      drawGlow(ctx, cx, cy, Math.min(W,H)*0.35*glowP, '#3B82F6', 0.15*glowP);
+      drawGlow(ctx, cx, cy, Math.min(W,H)*0.2*glowP, '#F59E0B', 0.1*glowP);
+    }
+
+    // Cloud shape solidifies
+    const cloudP = ease.out(subProgress(p, 0.5, 0.75));
+    if(cloudP > 0) {
+      drawCloud(ctx, cx, cy, Math.min(W,H)*0.3*cloudP, Math.min(W,H)*0.18*cloudP, 'rgba(59,130,246,0.2)', cloudP*0.6);
+    }
+
+    // Pulsing energy
+    const pulseP = subProgress(p, 0.6, 1);
+    if(pulseP > 0) {
+      const pulse = Math.sin(dt*2)*0.3+0.7;
+      drawGlow(ctx, cx, cy, Math.min(W,H)*0.25*pulse, '#3B82F6', 0.08*pulseP);
+    }
+
+    // Stat
+    const statP = subProgress(p, 0.55, 0.75);
+    if(statP > 0) {
+      ctx.globalAlpha = ease.out(statP);
+      ctx.font = `600 ${clamp(W*0.025, 14, 22)}px Inter`;
+      ctx.fillStyle = '#F59E0B';
+      ctx.textAlign = 'center';
+      ctx.fillText('$600B+ and growing', cx, cy + Math.min(W,H)*0.2);
+      ctx.globalAlpha = 1;
+    }
+
+    // Credits
+    const credP = subProgress(p, 0.8, 1);
+    if(credP > 0) {
+      ctx.globalAlpha = ease.out(credP) * 0.5;
+      ctx.font = '400 12px Inter';
+      ctx.fillStyle = '#94A3B8';
+      ctx.textAlign = 'center';
+      ctx.fillText('Introduction to Cloud Computing — SVIT College — Abhinav Gupta', cx, H - 40);
+      ctx.globalAlpha = 1;
+    }
+  }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION E — Render Loop & Scene Transitions
+   ═══════════════════════════════════════════════════════════════ */
+
+const SCENE_DURATIONS = [8,10,12,10,10,12,10,12,10,8,8,8]; // seconds
+const CROSSFADE = 0.5; // seconds overlap
+let totalDuration = SCENE_DURATIONS.reduce((a,b)=>a+b, 0);
+
+// Compute start times
+const sceneStarts = [];
+let cumulative = 0;
+SCENE_DURATIONS.forEach(d => { sceneStarts.push(cumulative); cumulative += d; });
+
+let currentScene = 0;
+let globalTime = 0;
+let playing = false;
+let lastFrameTime = 0;
+let animDt = 0; // accumulator for animations
+
+function getSceneAtTime(t) {
+  for(let i = sceneStarts.length-1; i >= 0; i--) {
+    if(t >= sceneStarts[i]) return i;
+  }
+  return 0;
+}
+
+function getSceneProgress(sceneIdx, t) {
+  const start = sceneStarts[sceneIdx];
+  const dur = SCENE_DURATIONS[sceneIdx];
+  return clamp((t - start) / dur, 0, 1);
+}
+
+function renderFrame(timestamp) {
+  const delta = lastFrameTime ? (timestamp - lastFrameTime) / 1000 : 0.016;
+  lastFrameTime = timestamp;
+
+  if(playing) {
+    globalTime += delta;
+    if(globalTime >= totalDuration) {
+      globalTime = totalDuration - 0.001;
+      playing = false;
+      updatePlayButton();
+    }
+  }
+
+  animDt += delta;
+
+  // Clear
+  const activeIdx = getSceneAtTime(globalTime);
+  const scene = scenes[activeIdx];
+
+  // Background
+  ctx.clearRect(0, 0, W, H);
+  const bgColor = scene.bg || '#0B1120';
+  ctx.fillStyle = bgColor;
+  ctx.fillRect(0, 0, W, H);
+
+  // Check for crossfade
+  const sceneLocalTime = globalTime - sceneStarts[activeIdx];
+  const sceneDur = SCENE_DURATIONS[activeIdx];
+  const fadeOutStart = sceneDur - CROSSFADE;
+
+  // Draw previous scene fading out at start of new scene
+  if(activeIdx > 0 && sceneLocalTime < CROSSFADE) {
+    const prevIdx = activeIdx - 1;
+    const prevScene = scenes[prevIdx];
+    const fadeAlpha = 1 - sceneLocalTime / CROSSFADE;
+    ctx.save();
+    ctx.globalAlpha = fadeAlpha;
+    const prevP = getSceneProgress(prevIdx, globalTime);
+    prevScene.draw(ctx, prevP, animDt);
+    ctx.restore();
+  }
+
+  // Draw current scene
+  const progress = getSceneProgress(activeIdx, globalTime);
+  ctx.save();
+  if(activeIdx > 0 && sceneLocalTime < CROSSFADE) {
+    ctx.globalAlpha = sceneLocalTime / CROSSFADE;
+  }
+  scene.draw(ctx, progress, animDt);
+  ctx.restore();
+
+  // Update scene index & UI
+  if(activeIdx !== currentScene) {
+    currentScene = activeIdx;
+    updateTextOverlay();
+    updateNavDots();
+  }
+
+  // Progress bar
+  document.getElementById('progress-bar').style.width = (globalTime / totalDuration * 100) + '%';
+
+  // Time display
+  const mins = Math.floor(globalTime / 60);
+  const secs = Math.floor(globalTime % 60);
+  document.getElementById('time-display').textContent =
+    `${mins}:${secs.toString().padStart(2,'0')} / ${Math.floor(totalDuration/60)}:${Math.floor(totalDuration%60).toString().padStart(2,'0')}`;
+
+  requestAnimationFrame(renderFrame);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION F — Playback Controller & UI
+   ═══════════════════════════════════════════════════════════════ */
+
+const titleEl = document.getElementById('scene-title');
+const subtitleEl = document.getElementById('scene-subtitle');
+
+function updateTextOverlay() {
+  const scene = scenes[currentScene];
+  // Fade out
+  gsap.to(titleEl, { opacity: 0, duration: 0.25, onComplete: () => {
+    titleEl.textContent = scene.title || '';
+    gsap.to(titleEl, { opacity: 1, duration: 0.4 });
+  }});
+  gsap.to(subtitleEl, { opacity: 0, duration: 0.25, onComplete: () => {
+    subtitleEl.textContent = scene.subtitle || '';
+    gsap.to(subtitleEl, { opacity: 0.7, duration: 0.4 });
+  }});
+}
+
+function updateNavDots() {
+  document.querySelectorAll('.nav-dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === currentScene);
+  });
+}
+
+function updatePlayButton() {
+  document.getElementById('btn-play').innerHTML = playing ? '&#10074;&#10074;' : '&#9654;';
+}
+
+// Build nav dots
+const navEl = document.getElementById('chapter-nav');
+scenes.forEach((_, i) => {
+  const dot = document.createElement('button');
+  dot.className = 'nav-dot' + (i===0 ? ' active' : '');
+  dot.title = scenes[i].title;
+  dot.addEventListener('click', () => goToScene(i));
+  navEl.appendChild(dot);
+});
+
+function goToScene(idx) {
+  idx = clamp(idx, 0, scenes.length-1);
+  globalTime = sceneStarts[idx];
+  currentScene = idx;
+  // Re-init scene if needed
+  if(scenes[idx].init) scenes[idx].init();
+  updateTextOverlay();
+  updateNavDots();
+}
+
+// Controls
+document.getElementById('btn-play').addEventListener('click', () => {
+  if(globalTime >= totalDuration - 0.01) globalTime = 0;
+  playing = !playing;
+  updatePlayButton();
+});
+
+document.getElementById('btn-prev').addEventListener('click', () => {
+  goToScene(currentScene - 1);
+});
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  goToScene(currentScene + 1);
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if(e.key === ' ' || e.key === 'k') {
+    e.preventDefault();
+    if(globalTime >= totalDuration - 0.01) globalTime = 0;
+    playing = !playing;
+    updatePlayButton();
+  } else if(e.key === 'ArrowRight' || e.key === 'l') {
+    goToScene(currentScene + 1);
+  } else if(e.key === 'ArrowLeft' || e.key === 'j') {
+    goToScene(currentScene - 1);
+  } else if(e.key === 'ArrowUp') {
+    globalTime = Math.min(globalTime + 2, totalDuration);
+  } else if(e.key === 'ArrowDown') {
+    globalTime = Math.max(globalTime - 2, 0);
+  } else if(e.key >= '1' && e.key <= '9') {
+    goToScene(parseInt(e.key) - 1);
+  } else if(e.key === '0') {
+    goToScene(9);
+  }
+});
+
+// Click on progress bar area to seek
+document.getElementById('progress-bar').parentElement.addEventListener('click', e => {
+  if(e.target === document.body || e.target === canvas) return;
+});
+
+// Init scenes that need it
+scenes.forEach(s => { if(s.init) s.init(); });
+
+// Show initial text
+updateTextOverlay();
+
+// Start render loop
+requestAnimationFrame(renderFrame);
+
+// Auto resize re-init
+window.addEventListener('resize', () => {
+  scenes.forEach(s => { if(s.init) s.init(); });
+});
+</script>
+</body>
+</html>
