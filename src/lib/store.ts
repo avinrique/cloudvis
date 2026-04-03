@@ -10,6 +10,22 @@ function canNavigate(): boolean {
   return true;
 }
 
+function getSavedScene(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const saved = localStorage.getItem('cloudvis-scene');
+    return saved ? parseInt(saved, 10) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function saveScene(index: number): void {
+  try {
+    localStorage.setItem('cloudvis-scene', String(index));
+  } catch {}
+}
+
 interface AppState {
   currentSceneIndex: number;
   totalScenes: number;
@@ -30,7 +46,7 @@ interface AppState {
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
-  currentSceneIndex: 0,
+  currentSceneIndex: getSavedScene(),
   totalScenes: 0,
   isTransitioning: false,
   animationSpeed: 1,
@@ -44,7 +60,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (sceneStepHandler && sceneStepHandler()) return;
     const { currentSceneIndex, totalScenes } = get();
     if (currentSceneIndex < totalScenes - 1) {
-      set({ currentSceneIndex: currentSceneIndex + 1, isPaused: false });
+      const next = currentSceneIndex + 1;
+      saveScene(next);
+      set({ currentSceneIndex: next, isPaused: false });
     }
   },
 
@@ -54,13 +72,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (sceneStepBackHandler && sceneStepBackHandler()) return;
     const { currentSceneIndex } = get();
     if (currentSceneIndex > 0) {
-      set({ currentSceneIndex: currentSceneIndex - 1, isPaused: false });
+      const prev = currentSceneIndex - 1;
+      saveScene(prev);
+      set({ currentSceneIndex: prev, isPaused: false });
     }
   },
 
   goToScene: (index: number) => {
     const { totalScenes } = get();
     if (index >= 0 && index < totalScenes) {
+      saveScene(index);
       set({ currentSceneIndex: index, isPaused: false });
     }
   },

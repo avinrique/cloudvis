@@ -5,6 +5,7 @@ import { scenes } from '@/lib/scenes';
 import { useAppStore } from '@/lib/store';
 import NavigationHUD from './NavigationHUD';
 import SpeedControl from './SpeedControl';
+import ErrorBoundary from './shared/ErrorBoundary';
 
 export default function SceneManager() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -116,15 +117,17 @@ export default function SceneManager() {
           transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
           className="absolute inset-0"
         >
-          <Suspense
-            fallback={
-              <div className="w-full h-full flex items-center justify-center">
-                <div className="w-3 h-5 bg-primary cursor-blink" />
-              </div>
-            }
-          >
-            <SceneComponent />
-          </Suspense>
+          <ErrorBoundary>
+            <Suspense
+              fallback={
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-3 h-5 bg-primary cursor-blink" />
+                </div>
+              }
+            >
+              <SceneComponent />
+            </Suspense>
+          </ErrorBoundary>
         </motion.div>
       </AnimatePresence>
 

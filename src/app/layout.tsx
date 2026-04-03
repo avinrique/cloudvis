@@ -22,8 +22,8 @@ const firaCode = Fira_Code({
 });
 
 export const metadata: Metadata = {
-  title: "Cloud Computing — Interactive Visualizer",
-  description: "An interactive visual learning experience for Cloud Computing Fundamentals",
+  title: "Cloud Computing — Session 2: Deep Dive",
+  description: "An interactive visual deep dive into cloud service models, virtualization, storage, scaling, and serverless architecture",
 };
 
 export default function RootLayout({

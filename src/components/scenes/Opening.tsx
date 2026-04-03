@@ -12,7 +12,7 @@ import ParticleField from '@/components/shared/ParticleField';
 import Narration from '@/components/shared/Narration';
 import InteractiveIndicator from '@/components/shared/InteractiveIndicator';
 
-const TITLE = 'CLOUD COMPUTING';
+const TITLE = 'DEEP DIVE';
 
 export default function Opening() {
   const [phase, setPhase] = useState(0);
@@ -225,7 +225,7 @@ export default function Opening() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3, duration: 0.8 }}
                 >
-                  An Interactive Visual Journey
+                  Session 2: Cloud Infrastructure
                 </motion.p>
                 <Narration text={narrations.scene1} delay={0.6} />
               </>
