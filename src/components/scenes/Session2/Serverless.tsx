@@ -2,10 +2,9 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSceneProgress } from '@/components/hooks/useSceneProgress';
-import { fadeInUp, staggerContainer, scaleIn } from '@/lib/animations';
+import { fadeInUp, staggerContainer, cinematicReveal } from '@/lib/animations';
 import { narrations, serverlessFeatures, serverlessProviders, stats } from '@/lib/content';
 import Narration from '@/components/shared/Narration';
-import InteractiveIndicator from '@/components/shared/InteractiveIndicator';
 import GlowBox from '@/components/shared/GlowBox';
 import Terminal from '@/components/shared/Terminal';
 
@@ -42,47 +41,53 @@ function FeatureIcon({ icon }: { icon: string }) {
 
 function EventFlowDiagram() {
   const events = [
-    { label: 'HTTP Request', icon: '↗' },
-    { label: 'Function', icon: 'ƒ' },
-    { label: 'Response', icon: '↙' },
+    { label: 'HTTP Request', icon: '↗', sub: 'Trigger' },
+    { label: 'Function', icon: 'ƒ', sub: 'Execute' },
+    { label: 'Response', icon: '↙', sub: 'Return' },
   ];
 
   return (
-    <motion.div
-      className="flex items-center gap-3"
-      variants={scaleIn}
-      initial="hidden"
-      animate="visible"
-    >
+    <motion.div className="flex items-center gap-3">
       {events.map((e, i) => (
         <motion.div key={e.label} className="flex items-center gap-3">
           <motion.div
-            className="w-16 h-16 rounded-xl flex flex-col items-center justify-center"
+            className="w-20 h-20 rounded-xl flex flex-col items-center justify-center relative overflow-hidden"
             style={{
-              background: i === 1 ? `${ACCENT}20` : 'rgba(17,22,51,0.6)',
-              border: `1.5px solid ${i === 1 ? ACCENT : 'rgba(255,255,255,0.1)'}`,
-              boxShadow: i === 1 ? `0 0 20px ${ACCENT}30` : 'none',
+              background: i === 1 ? `${ACCENT}15` : 'rgba(17,22,51,0.6)',
+              border: `1.5px solid ${i === 1 ? ACCENT : 'rgba(255,255,255,0.08)'}`,
             }}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: i * 0.2, type: 'spring', stiffness: 200, damping: 15 }}
+            initial={{ scale: 0, rotateY: -90, filter: 'blur(8px)' }}
+            animate={{ scale: 1, rotateY: 0, filter: 'blur(0px)' }}
+            transition={{ delay: i * 0.25, type: 'spring', stiffness: 180, damping: 15 }}
           >
-            <span className="text-lg" style={{ color: i === 1 ? ACCENT : 'rgba(255,255,255,0.4)' }}>
+            {i === 1 && (
+              <motion.div className="absolute inset-0 rounded-xl"
+                animate={{ boxShadow: [`inset 0 0 20px ${ACCENT}10`, `inset 0 0 30px ${ACCENT}25`, `inset 0 0 20px ${ACCENT}10`] }}
+                transition={{ duration: 2, repeat: Infinity }} />
+            )}
+            <motion.span className="text-2xl relative z-10"
+              style={{ color: i === 1 ? ACCENT : 'rgba(255,255,255,0.4)' }}
+              animate={i === 1 ? { scale: [1, 1.1, 1] } : {}}
+              transition={{ duration: 2, repeat: Infinity }}>
               {e.icon}
-            </span>
-            <span className="text-[8px] font-body mt-0.5" style={{ color: i === 1 ? ACCENT : 'rgba(255,255,255,0.3)' }}>
-              {e.label}
+            </motion.span>
+            <span className="text-[8px] font-body mt-1 relative z-10"
+              style={{ color: i === 1 ? ACCENT : 'rgba(255,255,255,0.3)' }}>
+              {e.sub}
             </span>
           </motion.div>
           {i < events.length - 1 && (
-            <motion.span
-              className="text-white/20 text-lg"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 + i * 0.2 }}
-            >
-              →
-            </motion.span>
+            <motion.div className="relative">
+              <motion.div className="w-8 h-px"
+                style={{ background: `${ACCENT}40` }}
+                initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
+                transition={{ delay: 0.5 + i * 0.25, duration: 0.4 }} />
+              {/* Animated dot traveling along the line */}
+              <motion.div className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full"
+                style={{ background: ACCENT, boxShadow: `0 0 6px ${ACCENT}` }}
+                animate={{ left: ['-10%', '110%'] }}
+                transition={{ duration: 0.8, repeat: Infinity, delay: 1 + i * 0.3, repeatDelay: 0.5 }} />
+            </motion.div>
           )}
         </motion.div>
       ))}
@@ -91,7 +96,7 @@ function EventFlowDiagram() {
 }
 
 export default function Serverless() {
-  const { phase } = useSceneProgress({ totalPhases: 4 });
+  const { phase } = useSceneProgress({ totalPhases: 4, autoAdvance: [3000, 3000, 3000, 4000] });
 
   return (
     <motion.div
@@ -103,7 +108,7 @@ export default function Serverless() {
       <motion.h2
         className="text-3xl md:text-4xl font-display font-bold mb-1"
         style={{ color: ACCENT }}
-        variants={fadeInUp}
+        variants={cinematicReveal}
         initial="hidden"
         animate="visible"
       >
@@ -111,17 +116,15 @@ export default function Serverless() {
       </motion.h2>
       <motion.p
         className="text-sm text-white/40 font-body mb-6"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.6 }}
       >
         Write functions, not servers
       </motion.p>
 
-      {/* Phase 0: Event flow */}
       {phase === 0 && <EventFlowDiagram />}
 
-      {/* Phase 1: Features */}
       <AnimatePresence>
         {phase >= 1 && phase < 3 && (
           <motion.div
@@ -129,15 +132,18 @@ export default function Serverless() {
             variants={staggerContainer}
             initial="hidden"
             animate="visible"
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, filter: 'blur(6px)' }}
           >
-            {serverlessFeatures.map((f) => (
+            {serverlessFeatures.map((f, i) => (
               <motion.div key={f.name} variants={fadeInUp}>
-                <GlowBox color={ACCENT} intensity={0.15} className="h-full">
+                <GlowBox color={ACCENT} intensity={0.15} pulse className="h-full">
                   <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${ACCENT}15` }}>
+                    <motion.div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: `${ACCENT}15` }}
+                      animate={{ y: [0, -2, 0] }}
+                      transition={{ duration: 3, repeat: Infinity, delay: i * 0.4 }}>
                       <FeatureIcon icon={f.icon} />
-                    </div>
+                    </motion.div>
                     <div>
                       <h4 className="text-sm font-display font-bold text-white mb-0.5">{f.name}</h4>
                       <p className="text-xs text-white/50 font-body">{f.description}</p>
@@ -150,14 +156,12 @@ export default function Serverless() {
         )}
       </AnimatePresence>
 
-      {/* Phase 2: Code example */}
       <AnimatePresence>
         {phase >= 2 && phase < 3 && (
-          <motion.div
-            className="mt-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
+          <motion.div className="mt-4"
+            initial={{ opacity: 0, y: 20, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}>
             <Terminal title="lambda.js" showCursor={false} width="w-full max-w-md">
               <div className="text-xs">
                 <span className="text-purple-400">export</span>{' '}
@@ -180,46 +184,43 @@ export default function Serverless() {
         )}
       </AnimatePresence>
 
-      {/* Phase 3: Providers + stats */}
       <AnimatePresence>
         {phase >= 3 && (
-          <motion.div
-            className="flex flex-col items-center gap-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-          >
+          <motion.div className="flex flex-col items-center gap-4"
+            initial={{ opacity: 0, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, filter: 'blur(0px)' }}
+            transition={{ duration: 0.6 }}>
             <div className="flex gap-3">
               {serverlessProviders.map((p, i) => (
-                <motion.div
-                  key={p.name}
-                  className="px-3 py-2 rounded-lg text-xs font-body"
-                  style={{ border: `1px solid ${p.color}30`, background: `${p.color}10`, color: p.color }}
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ delay: i * 0.1, type: 'spring', stiffness: 300, damping: 18 }}
-                >
-                  {p.name}
+                <motion.div key={p.name}
+                  className="px-3 py-2 rounded-lg text-xs font-body relative overflow-hidden"
+                  style={{ border: `1px solid ${p.color}30`, background: `${p.color}08`, color: p.color }}
+                  initial={{ scale: 0, rotateY: -60 }}
+                  animate={{ scale: 1, rotateY: 0 }}
+                  transition={{ delay: i * 0.1, type: 'spring', stiffness: 250, damping: 18 }}>
+                  <motion.div className="absolute inset-0"
+                    style={{ background: `linear-gradient(90deg, transparent, ${p.color}10, transparent)` }}
+                    animate={{ x: ['-100%', '200%'] }}
+                    transition={{ duration: 3, repeat: Infinity, delay: i * 0.3, ease: 'linear' }} />
+                  <span className="relative z-10">{p.name}</span>
                 </motion.div>
               ))}
             </div>
-            <motion.div
-              className="px-5 py-3 rounded-lg border border-orange-500/20"
+            <motion.div className="px-5 py-3 rounded-lg border border-orange-500/20 relative overflow-hidden"
               style={{ background: `${ACCENT}08` }}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 }}
-            >
-              <span className="text-xl font-display font-bold" style={{ color: ACCENT }}>
+              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5 }}>
+              <motion.span className="text-xl font-display font-bold" style={{ color: ACCENT }}
+                animate={{ textShadow: [`0 0 10px ${ACCENT}40`, `0 0 25px ${ACCENT}60`, `0 0 10px ${ACCENT}40`] }}
+                transition={{ duration: 2, repeat: Infinity }}>
                 {stats.serverlessExecs}
-              </span>
+              </motion.span>
               <span className="text-xs text-white/40 font-body ml-2">free executions on AWS Lambda</span>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {phase < 3 && <InteractiveIndicator className="mt-6" />}
       <Narration text={narrations.scene10} delay={0.4} />
     </motion.div>
   );

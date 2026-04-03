@@ -2,10 +2,9 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSceneProgress } from '@/components/hooks/useSceneProgress';
-import { fadeInUp, staggerContainer } from '@/lib/animations';
+import { fadeInUp, staggerContainer, cinematicReveal } from '@/lib/animations';
 import { narrations, paasFeatures, stats } from '@/lib/content';
 import Narration from '@/components/shared/Narration';
-import InteractiveIndicator from '@/components/shared/InteractiveIndicator';
 import GlowBox from '@/components/shared/GlowBox';
 
 const ACCENT = '#A855F7';
@@ -14,9 +13,7 @@ function FeatureIcon({ icon }: { icon: string }) {
   const paths: Record<string, JSX.Element> = {
     deploy: (
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={ACCENT} strokeWidth="1.5">
-        <path d="M12 3v12" />
-        <polyline points="8 11 12 15 16 11" />
-        <path d="M20 21H4" />
+        <path d="M12 3v12" /><polyline points="8 11 12 15 16 11" /><path d="M20 21H4" />
       </svg>
     ),
     database: (
@@ -41,38 +38,68 @@ function FeatureIcon({ icon }: { icon: string }) {
 }
 
 function PipelineDiagram() {
-  const steps = ['git push', 'Build', 'Test', 'Deploy', 'Live'];
+  const steps = [
+    { label: 'git push', icon: '↗' },
+    { label: 'Build', icon: '⚙' },
+    { label: 'Test', icon: '✓' },
+    { label: 'Deploy', icon: '▶' },
+    { label: 'Live!', icon: '●' },
+  ];
+
   return (
     <motion.div
-      className="flex items-center gap-2"
+      className="flex items-center gap-1"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ delay: 0.3 }}
     >
       {steps.map((step, i) => (
-        <motion.div key={step} className="flex items-center gap-2">
+        <motion.div key={step.label} className="flex items-center gap-1">
           <motion.div
-            className="px-3 py-2 rounded-md text-xs font-code"
+            className="flex flex-col items-center gap-1 px-4 py-3 rounded-lg relative overflow-hidden"
             style={{
-              background: `${ACCENT}${i === steps.length - 1 ? '30' : '15'}`,
-              border: `1px solid ${ACCENT}${i === steps.length - 1 ? '60' : '30'}`,
-              color: i === steps.length - 1 ? ACCENT : 'rgba(255,255,255,0.7)',
+              background: i === steps.length - 1 ? `${ACCENT}20` : `rgba(17,22,51,0.6)`,
+              border: `1px solid ${i === steps.length - 1 ? `${ACCENT}50` : 'rgba(255,255,255,0.08)'}`,
             }}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.5 + i * 0.2, type: 'spring', stiffness: 300, damping: 20 }}
+            initial={{ scale: 0, opacity: 0, rotateY: -90 }}
+            animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+            transition={{
+              delay: 0.3 + i * 0.25,
+              type: 'spring',
+              stiffness: 200,
+              damping: 18,
+            }}
           >
-            {step}
+            {/* Sweep glow on active */}
+            {i === steps.length - 1 && (
+              <motion.div
+                className="absolute inset-0"
+                style={{ background: `linear-gradient(90deg, transparent, ${ACCENT}15, transparent)` }}
+                animate={{ x: ['-100%', '200%'] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+              />
+            )}
+            <span className="text-lg" style={{ color: i === steps.length - 1 ? ACCENT : 'rgba(255,255,255,0.4)' }}>
+              {step.icon}
+            </span>
+            <span className="text-[10px] font-code relative z-10" style={{ color: i === steps.length - 1 ? ACCENT : 'rgba(255,255,255,0.5)' }}>
+              {step.label}
+            </span>
           </motion.div>
           {i < steps.length - 1 && (
-            <motion.span
-              className="text-white/20"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.7 + i * 0.2 }}
+            <motion.div
+              className="flex items-center"
+              initial={{ scaleX: 0, opacity: 0 }}
+              animate={{ scaleX: 1, opacity: 1 }}
+              transition={{ delay: 0.6 + i * 0.25, duration: 0.3 }}
             >
-              →
-            </motion.span>
+              <motion.div
+                className="w-6 h-px"
+                style={{ background: `linear-gradient(90deg, ${ACCENT}30, ${ACCENT}60)` }}
+                animate={{ opacity: [0.3, 0.8, 0.3] }}
+                transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.2 }}
+              />
+              <motion.span className="text-white/20 text-xs -ml-1">›</motion.span>
+            </motion.div>
           )}
         </motion.div>
       ))}
@@ -81,7 +108,7 @@ function PipelineDiagram() {
 }
 
 export default function PaaSDeepDive() {
-  const { phase } = useSceneProgress({ totalPhases: 3 });
+  const { phase } = useSceneProgress({ totalPhases: 3, autoAdvance: [3500, 3000, 4000] });
 
   return (
     <motion.div
@@ -93,7 +120,7 @@ export default function PaaSDeepDive() {
       <motion.h2
         className="text-3xl md:text-4xl font-display font-bold mb-1"
         style={{ color: ACCENT }}
-        variants={fadeInUp}
+        variants={cinematicReveal}
         initial="hidden"
         animate="visible"
       >
@@ -101,17 +128,15 @@ export default function PaaSDeepDive() {
       </motion.h2>
       <motion.p
         className="text-sm text-white/40 font-body mb-6"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.6 }}
       >
         Platform as a Service — just bring your code
       </motion.p>
 
-      {/* Phase 0: Pipeline diagram */}
       {phase === 0 && <PipelineDiagram />}
 
-      {/* Phase 1: Feature grid */}
       <AnimatePresence>
         {phase >= 1 && (
           <motion.div
@@ -122,18 +147,20 @@ export default function PaaSDeepDive() {
           >
             {paasFeatures.map((f, i) => (
               <motion.div key={f.name} variants={fadeInUp}>
-                <GlowBox color={ACCENT} intensity={0.2} className="h-full">
+                <GlowBox color={ACCENT} intensity={0.15} pulse className="h-full">
                   <div className="flex items-start gap-3">
-                    <div
+                    <motion.div
                       className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
                       style={{ background: `${ACCENT}15` }}
+                      animate={{ y: [0, -2, 0] }}
+                      transition={{ duration: 3, repeat: Infinity, delay: i * 0.4 }}
                     >
                       <FeatureIcon icon={f.icon} />
-                    </div>
+                    </motion.div>
                     <div>
                       <h4 className="text-sm font-display font-bold text-white mb-1">{f.name}</h4>
                       <p className="text-xs text-white/50 font-body leading-relaxed">{f.description}</p>
-                      <p className="text-[10px] text-purple-300/60 font-body mt-1">{f.example}</p>
+                      <p className="text-[10px] text-purple-300/50 font-body mt-1">{f.example}</p>
                     </div>
                   </div>
                 </GlowBox>
@@ -143,31 +170,37 @@ export default function PaaSDeepDive() {
         )}
       </AnimatePresence>
 
-      {/* Phase 2: Deploy time callout */}
       <AnimatePresence>
         {phase >= 2 && (
           <motion.div
             className="mt-5 flex items-center gap-4"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            initial={{ opacity: 0, y: 20, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-            <div className="px-5 py-3 rounded-lg border border-purple-500/20" style={{ background: `${ACCENT}08` }}>
-              <span className="text-2xl font-display font-bold" style={{ color: ACCENT }}>
+            <motion.div
+              className="px-5 py-3 rounded-lg border border-purple-500/20 relative overflow-hidden"
+              style={{ background: `${ACCENT}08` }}
+            >
+              <motion.span
+                className="text-2xl font-display font-bold"
+                style={{ color: ACCENT }}
+                animate={{ textShadow: [`0 0 10px ${ACCENT}40`, `0 0 20px ${ACCENT}60`, `0 0 10px ${ACCENT}40`] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
                 {stats.deployTime}
-              </span>
+              </motion.span>
               <span className="text-xs text-white/40 font-body ml-2">to deploy</span>
-            </div>
+            </motion.div>
             <div className="px-5 py-3 rounded-lg border border-purple-500/20" style={{ background: `${ACCENT}08` }}>
               <p className="text-sm text-white/60 font-body">
-                <span className="text-purple-400 font-bold">Best for:</span> App development, rapid prototyping, startups
+                <span className="text-purple-400 font-bold">Best for:</span> App dev, rapid prototyping, startups
               </p>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {phase < 2 && <InteractiveIndicator className="mt-6" />}
       <Narration text={narrations.scene4} delay={0.4} />
     </motion.div>
   );

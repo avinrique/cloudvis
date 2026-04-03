@@ -2,10 +2,9 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSceneProgress } from '@/components/hooks/useSceneProgress';
-import { fadeInUp, staggerContainer, scaleIn } from '@/lib/animations';
+import { fadeInUp, staggerContainer, scaleIn, cinematicReveal } from '@/lib/animations';
 import { narrations, saasExamples } from '@/lib/content';
 import Narration from '@/components/shared/Narration';
-import InteractiveIndicator from '@/components/shared/InteractiveIndicator';
 
 const ACCENT = '#06B6D4';
 
@@ -66,9 +65,10 @@ function AppCard({ app, index }: { app: (typeof saasExamples)[number]; index: nu
         className="w-12 h-12 rounded-xl flex items-center justify-center mb-2"
         style={{ background: `${app.color}15`, border: `1.5px solid ${app.color}30` }}
         animate={{
+          y: [0, -3, 0],
           boxShadow: [`0 0 8px ${app.color}20`, `0 0 16px ${app.color}40`, `0 0 8px ${app.color}20`],
         }}
-        transition={{ duration: 2, repeat: Infinity, delay: index * 0.3 }}
+        transition={{ duration: 2.5, repeat: Infinity, delay: index * 0.3 }}
       >
         <SaaSIcon icon={app.icon} color={app.color} />
       </motion.div>
@@ -77,8 +77,8 @@ function AppCard({ app, index }: { app: (typeof saasExamples)[number]; index: nu
       <motion.span
         className="text-xs font-code mt-1"
         style={{ color: app.color }}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        initial={{ opacity: 0, filter: 'blur(6px)' }}
+        animate={{ opacity: 1, filter: 'blur(0px)' }}
         transition={{ delay: 0.5 }}
       >
         {app.users}
@@ -88,19 +88,19 @@ function AppCard({ app, index }: { app: (typeof saasExamples)[number]; index: nu
 }
 
 export default function SaaSDeepDive() {
-  const { phase } = useSceneProgress({ totalPhases: 3 });
+  const { phase } = useSceneProgress({ totalPhases: 3, autoAdvance: [3000, 3500, 4000] });
 
   return (
     <motion.div
       className="relative w-full h-full flex flex-col items-center justify-center px-6 py-10 overflow-hidden"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
+      initial={{ opacity: 0, filter: 'blur(6px)' }}
+      animate={{ opacity: 1, filter: 'blur(0px)' }}
       transition={{ duration: 0.5 }}
     >
       <motion.h2
         className="text-3xl md:text-4xl font-display font-bold mb-1"
         style={{ color: ACCENT }}
-        variants={fadeInUp}
+        variants={cinematicReveal}
         initial="hidden"
         animate="visible"
       >
@@ -108,8 +108,8 @@ export default function SaaSDeepDive() {
       </motion.h2>
       <motion.p
         className="text-sm text-white/40 font-body mb-6"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        initial={{ opacity: 0, filter: 'blur(6px)' }}
+        animate={{ opacity: 1, filter: 'blur(0px)' }}
         transition={{ delay: 0.3 }}
       >
         Software as a Service — just open and use
@@ -166,8 +166,8 @@ export default function SaaSDeepDive() {
           <motion.div
             className="mt-5 px-6 py-3 rounded-lg border border-cyan-500/20"
             style={{ background: `${ACCENT}08` }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 20, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
             transition={{ duration: 0.5 }}
           >
             <p className="text-sm text-white/60 font-body text-center">
@@ -178,7 +178,6 @@ export default function SaaSDeepDive() {
         )}
       </AnimatePresence>
 
-      {phase < 2 && <InteractiveIndicator className="mt-6" />}
       <Narration text={narrations.scene5} delay={0.4} />
     </motion.div>
   );

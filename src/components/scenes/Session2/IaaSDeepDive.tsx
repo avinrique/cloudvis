@@ -2,10 +2,9 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSceneProgress } from '@/components/hooks/useSceneProgress';
-import { fadeInUp, staggerContainer } from '@/lib/animations';
+import { fadeInUp, staggerContainer, cinematicReveal } from '@/lib/animations';
 import { narrations, iaasFeatures, stats } from '@/lib/content';
 import Narration from '@/components/shared/Narration';
-import InteractiveIndicator from '@/components/shared/InteractiveIndicator';
 import GlowBox from '@/components/shared/GlowBox';
 
 const ACCENT = '#3B82F6';
@@ -45,96 +44,106 @@ function FeatureIcon({ icon }: { icon: string }) {
   return paths[icon] || null;
 }
 
-function FeatureCard({
-  feature,
-  index,
-}: {
-  feature: (typeof iaasFeatures)[number];
-  index: number;
-}) {
-  return (
-    <motion.div variants={fadeInUp}>
-      <GlowBox color={ACCENT} intensity={0.2} className="h-full">
-        <div className="flex items-start gap-3">
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-            style={{ background: `${ACCENT}15` }}
-          >
-            <FeatureIcon icon={feature.icon} />
-          </div>
-          <div>
-            <h4 className="text-sm font-display font-bold text-white mb-1">{feature.name}</h4>
-            <p className="text-xs text-white/50 font-body leading-relaxed">{feature.description}</p>
-            <p className="text-[10px] text-blue-300/60 font-body mt-1">{feature.example}</p>
-          </div>
-        </div>
-      </GlowBox>
-    </motion.div>
-  );
-}
-
-function ServerDiagram() {
+function AnimatedServerDiagram() {
   return (
     <motion.div
-      className="flex flex-col items-center gap-2"
-      initial={{ opacity: 0, scale: 0.8 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+      className="flex flex-col items-center gap-3"
+      initial={{ opacity: 0, scale: 0.9, filter: 'blur(8px)' }}
+      animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+      transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
     >
-      <svg width="200" height="130" viewBox="0 0 200 130" fill="none">
-        {/* Physical server */}
+      <svg width="260" height="150" viewBox="0 0 260 150" fill="none">
+        {/* Physical server - draws in */}
         <motion.rect
-          x="50" y="80" width="100" height="40" rx="4"
-          stroke={ACCENT} strokeWidth="1.5" fill={`${ACCENT}10`}
-          initial={{ pathLength: 0 }}
-          animate={{ pathLength: 1 }}
-          transition={{ duration: 0.8 }}
+          x="50" y="90" width="160" height="45" rx="6"
+          stroke={ACCENT} strokeWidth="1.5" fill={`${ACCENT}08`}
+          initial={{ pathLength: 0, opacity: 0 }}
+          animate={{ pathLength: 1, opacity: 1 }}
+          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
         />
-        <motion.text x="100" y="104" textAnchor="middle" fill="white" fontSize="10" fontFamily="monospace"
-          initial={{ opacity: 0 }} animate={{ opacity: 0.6 }} transition={{ delay: 0.5 }}>
+        <motion.text x="130" y="118" textAnchor="middle" fill="white" fontSize="10" fontFamily="monospace"
+          initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} transition={{ delay: 0.8, duration: 0.5 }}>
           Physical Server
         </motion.text>
-        {/* VM boxes on top */}
+
+        {/* Hypervisor line */}
+        <motion.line
+          x1="60" y1="85" x2="200" y2="85"
+          stroke={ACCENT} strokeWidth="0.5" strokeDasharray="4 3"
+          initial={{ pathLength: 0 }} animate={{ pathLength: 1 }}
+          transition={{ delay: 0.5, duration: 0.6 }}
+        />
+        <motion.text x="130" y="82" textAnchor="middle" fill={ACCENT} fontSize="8" fontFamily="monospace"
+          initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} transition={{ delay: 0.8 }}>
+          Hypervisor
+        </motion.text>
+
+        {/* VMs spring up */}
         {[0, 1, 2].map((i) => (
           <motion.g key={i}>
             <motion.rect
-              x={55 + i * 32} y={20 + (i === 1 ? -5 : 0)} width="28" height="48"
-              rx="3" stroke={ACCENT} strokeWidth="1" fill={`${ACCENT}20`}
-              initial={{ y: 80, opacity: 0 }}
-              animate={{ y: 20 + (i === 1 ? -5 : 0), opacity: 1 }}
-              transition={{ delay: 0.8 + i * 0.2, type: 'spring', stiffness: 200, damping: 15 }}
+              x={60 + i * 55} y="12" width="45" height="65" rx="5"
+              stroke={ACCENT} strokeWidth="1" fill={`${ACCENT}12`}
+              initial={{ y: 90, opacity: 0, scaleY: 0 }}
+              animate={{ y: 12, opacity: 1, scaleY: 1 }}
+              transition={{
+                delay: 1 + i * 0.2,
+                type: 'spring',
+                stiffness: 150,
+                damping: 14,
+              }}
+            />
+            {/* OS + App blocks inside VM */}
+            <motion.rect
+              x={64 + i * 55} y="50" width="37" height="12" rx="2"
+              fill={`${ACCENT}20`}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              transition={{ delay: 1.4 + i * 0.15 }}
             />
             <motion.text
-              x={69 + i * 32} y={48 + (i === 1 ? -5 : 0)}
-              textAnchor="middle" fill="white" fontSize="8" fontFamily="monospace"
-              initial={{ opacity: 0 }} animate={{ opacity: 0.7 }}
-              transition={{ delay: 1 + i * 0.2 }}
-            >
-              VM{i + 1}
-            </motion.text>
+              x={82 + i * 55} y="59" textAnchor="middle" fill="white" fontSize="7" fontFamily="monospace"
+              initial={{ opacity: 0 }} animate={{ opacity: 0.4 }} transition={{ delay: 1.5 + i * 0.15 }}
+            >OS</motion.text>
+            <motion.rect
+              x={64 + i * 55} y="22" width="37" height="22" rx="3"
+              fill={`${ACCENT}25`}
+              initial={{ opacity: 0, scale: 0 }} animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 1.6 + i * 0.15, type: 'spring', stiffness: 200 }}
+            />
+            <motion.text
+              x={82 + i * 55} y="37" textAnchor="middle" fill="white" fontSize="9" fontFamily="monospace" fontWeight="bold"
+              initial={{ opacity: 0 }} animate={{ opacity: 0.7 }} transition={{ delay: 1.7 + i * 0.15 }}
+            >App {i + 1}</motion.text>
           </motion.g>
         ))}
-        {/* Arrow */}
-        <motion.line
-          x1="100" y1="70" x2="100" y2="80"
-          stroke={ACCENT} strokeWidth="1" strokeDasharray="3 2"
-          initial={{ opacity: 0 }} animate={{ opacity: 0.5 }} transition={{ delay: 1.5 }}
-        />
+
+        {/* Animated pulse on VMs */}
+        {[0, 1, 2].map((i) => (
+          <motion.circle
+            key={`led-${i}`}
+            cx={67 + i * 55} cy={17}
+            r="2" fill="#22C55E"
+            animate={{ opacity: [1, 0.3, 1], r: [2, 2.5, 2] }}
+            transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.3 }}
+          />
+        ))}
       </svg>
-      <motion.span
-        className="text-xs font-body text-white/40"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 1.2 }}
+      <motion.div
+        className="flex items-center gap-2 px-3 py-1.5 rounded-full"
+        style={{ background: `${ACCENT}10`, border: `1px solid ${ACCENT}20` }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 2, duration: 0.5 }}
       >
-        {stats.vmPerServer} VMs per server
-      </motion.span>
+        <span className="text-xs font-code" style={{ color: ACCENT }}>{stats.vmPerServer}</span>
+        <span className="text-[10px] text-white/40 font-body">VMs per server</span>
+      </motion.div>
     </motion.div>
   );
 }
 
 export default function IaaSDeepDive() {
-  const { phase } = useSceneProgress({ totalPhases: 3 });
+  const { phase } = useSceneProgress({ totalPhases: 3, autoAdvance: [3500, 3000, 4000] });
 
   return (
     <motion.div
@@ -146,7 +155,7 @@ export default function IaaSDeepDive() {
       <motion.h2
         className="text-3xl md:text-4xl font-display font-bold mb-1"
         style={{ color: ACCENT }}
-        variants={fadeInUp}
+        variants={cinematicReveal}
         initial="hidden"
         animate="visible"
       >
@@ -154,17 +163,15 @@ export default function IaaSDeepDive() {
       </motion.h2>
       <motion.p
         className="text-sm text-white/40 font-body mb-6"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.6 }}
       >
         Infrastructure as a Service — the building blocks
       </motion.p>
 
-      {/* Phase 0: Server diagram */}
-      {phase === 0 && <ServerDiagram />}
+      {phase === 0 && <AnimatedServerDiagram />}
 
-      {/* Phase 1: Feature grid */}
       <AnimatePresence>
         {phase >= 1 && (
           <motion.div
@@ -174,23 +181,46 @@ export default function IaaSDeepDive() {
             animate="visible"
           >
             {iaasFeatures.map((f, i) => (
-              <FeatureCard key={f.name} feature={f} index={i} />
+              <motion.div key={f.name} variants={fadeInUp}>
+                <GlowBox color={ACCENT} intensity={0.2} pulse className="h-full">
+                  <div className="flex items-start gap-3">
+                    <motion.div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ background: `${ACCENT}15` }}
+                      animate={{ rotate: [0, 2, -2, 0] }}
+                      transition={{ duration: 4, repeat: Infinity, delay: i * 0.5 }}
+                    >
+                      <FeatureIcon icon={f.icon} />
+                    </motion.div>
+                    <div>
+                      <h4 className="text-sm font-display font-bold text-white mb-1">{f.name}</h4>
+                      <p className="text-xs text-white/50 font-body leading-relaxed">{f.description}</p>
+                      <p className="text-[10px] text-blue-300/50 font-body mt-1">{f.example}</p>
+                    </div>
+                  </div>
+                </GlowBox>
+              </motion.div>
             ))}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Phase 2: Use case callout */}
       <AnimatePresence>
         {phase >= 2 && (
           <motion.div
-            className="mt-5 px-6 py-3 rounded-lg border border-blue-500/20"
-            style={{ background: `${ACCENT}08` }}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            className="mt-5 px-6 py-3 rounded-lg border border-blue-500/20 relative overflow-hidden"
+            style={{ background: `${ACCENT}06` }}
+            initial={{ opacity: 0, y: 20, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           >
-            <p className="text-sm text-white/60 font-body text-center">
+            <motion.div
+              className="absolute inset-0"
+              style={{ background: `linear-gradient(90deg, transparent, ${ACCENT}08, transparent)` }}
+              animate={{ x: ['-100%', '200%'] }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'linear' }}
+            />
+            <p className="text-sm text-white/60 font-body text-center relative z-10">
               <span className="text-blue-400 font-bold">Best for:</span> Custom infrastructure needs,
               legacy app migration, full OS-level control
             </p>
@@ -198,7 +228,6 @@ export default function IaaSDeepDive() {
         )}
       </AnimatePresence>
 
-      {phase < 2 && <InteractiveIndicator className="mt-6" />}
       <Narration text={narrations.scene3} delay={0.4} />
     </motion.div>
   );

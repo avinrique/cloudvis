@@ -2,10 +2,9 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSceneProgress } from '@/components/hooks/useSceneProgress';
-import { fadeInUp } from '@/lib/animations';
+import { fadeInUp, cinematicReveal } from '@/lib/animations';
 import { narrations, autoScalingSteps, stats } from '@/lib/content';
 import Narration from '@/components/shared/Narration';
-import InteractiveIndicator from '@/components/shared/InteractiveIndicator';
 
 const ACCENT = '#22C55E';
 
@@ -16,11 +15,13 @@ function ServerCluster({ count, color }: { count: number; color: string }) {
         <motion.div
           key={i}
           className="flex flex-col items-center"
-          initial={{ scale: 0, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          transition={{ delay: i * 0.1, type: 'spring', stiffness: 300, damping: 18 }}
+          initial={{ scale: 0, opacity: 0, rotateY: -90 }}
+          animate={{ scale: 1, opacity: 1, rotateY: 0 }}
+          transition={{ delay: i * 0.08, type: 'spring', stiffness: 250, damping: 18 }}
         >
-          <svg width="36" height="40" viewBox="0 0 36 40" fill="none">
+          <motion.svg width="36" height="40" viewBox="0 0 36 40" fill="none"
+            animate={{ y: [0, -2, 0] }}
+            transition={{ duration: 2, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}>
             <rect x="2" y="2" width="32" height="14" rx="2" stroke={color} strokeWidth="1.2" fill={`${color}15`} />
             <circle cx="8" cy="9" r="1.5" fill={color}>
               <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" begin={`${i * 0.2}s`} />
@@ -29,7 +30,7 @@ function ServerCluster({ count, color }: { count: number; color: string }) {
             <circle cx="8" cy="27" r="1.5" fill={color}>
               <animate attributeName="opacity" values="1;0.3;1" dur="1.5s" repeatCount="indefinite" begin={`${i * 0.2 + 0.3}s`} />
             </circle>
-          </svg>
+          </motion.svg>
         </motion.div>
       ))}
     </div>
@@ -41,19 +42,19 @@ function UserIcons({ count }: { count: number }) {
   return (
     <div className="flex items-center gap-1">
       {Array.from({ length: Math.round(display) }).map((_, i) => (
-        <motion.svg
-          key={i}
-          width="14" height="14" viewBox="0 0 24 24"
-          fill="none" stroke="white" strokeWidth="1.5" opacity={0.4}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.4 }}
-          transition={{ delay: i * 0.05 }}
-        >
+        <motion.svg key={i} width="14" height="14" viewBox="0 0 24 24"
+          fill="none" stroke="white" strokeWidth="1.5"
+          initial={{ opacity: 0, scale: 0 }}
+          animate={{ opacity: 0.4, scale: 1 }}
+          transition={{ delay: i * 0.03, type: 'spring', stiffness: 300, damping: 15 }}>
           <circle cx="12" cy="8" r="4" />
           <path d="M4 20c0-4 4-7 8-7s8 3 8 7" />
         </motion.svg>
       ))}
-      <span className="text-xs text-white/40 font-code ml-1">{count}</span>
+      <motion.span className="text-xs text-white/40 font-code ml-1"
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+        {count}
+      </motion.span>
     </div>
   );
 }
@@ -62,12 +63,11 @@ function LoadBalancerDiagram() {
   return (
     <motion.div
       className="flex flex-col items-center gap-2 mt-4"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
+      initial={{ opacity: 0, y: 20, filter: 'blur(8px)' }}
+      animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+      transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
     >
       <svg width="280" height="100" viewBox="0 0 280 100" fill="none">
-        {/* Users */}
         <motion.g initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
           {[0, 1, 2].map((i) => (
             <g key={i}>
@@ -77,41 +77,34 @@ function LoadBalancerDiagram() {
           ))}
           <text x="140" y="32" textAnchor="middle" fill="white" fontSize="8" fontFamily="monospace" opacity="0.4">Users</text>
         </motion.g>
-
-        {/* Load Balancer */}
-        <motion.rect
-          x="100" y="40" width="80" height="20" rx="4"
+        <motion.rect x="100" y="40" width="80" height="20" rx="4"
           stroke={ACCENT} strokeWidth="1.5" fill={`${ACCENT}15`}
-          initial={{ scaleX: 0 }} animate={{ scaleX: 1 }}
-          transition={{ delay: 0.4, duration: 0.4 }}
-        />
-        <motion.text
-          x="140" y="54" textAnchor="middle" fill={ACCENT} fontSize="8" fontFamily="monospace"
-          initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} transition={{ delay: 0.6 }}
-        >
-          Load Balancer
-        </motion.text>
-
-        {/* Lines to servers */}
+          initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.4, duration: 0.5 }} />
+        <motion.text x="140" y="54" textAnchor="middle" fill={ACCENT} fontSize="8" fontFamily="monospace"
+          initial={{ opacity: 0 }} animate={{ opacity: 0.8 }} transition={{ delay: 0.7 }}>Load Balancer</motion.text>
         {[0, 1, 2].map((i) => (
-          <motion.line
-            key={i}
-            x1="140" y1="60" x2={80 + i * 60} y2="80"
+          <motion.line key={`line-${i}`} x1="140" y1="60" x2={80 + i * 60} y2="80"
             stroke={ACCENT} strokeWidth="1" strokeDasharray="3 2"
             initial={{ pathLength: 0, opacity: 0 }}
             animate={{ pathLength: 1, opacity: 0.4 }}
-            transition={{ delay: 0.8 + i * 0.1, duration: 0.3 }}
-          />
+            transition={{ delay: 0.8 + i * 0.1, duration: 0.4 }} />
         ))}
-
-        {/* Servers */}
         {[0, 1, 2].map((i) => (
-          <motion.rect
-            key={i}
-            x={65 + i * 60} y="78" width="30" height="16" rx="3"
+          <motion.rect key={`srv-${i}`} x={65 + i * 60} y="78" width="30" height="16" rx="3"
             stroke={ACCENT} strokeWidth="1" fill={`${ACCENT}20`}
             initial={{ scale: 0 }} animate={{ scale: 1 }}
-            transition={{ delay: 1 + i * 0.1, type: 'spring', stiffness: 300 }}
+            transition={{ delay: 1 + i * 0.1, type: 'spring', stiffness: 300 }} />
+        ))}
+        {/* Traffic animation dots */}
+        {[0, 1, 2].map((i) => (
+          <motion.circle key={`dot-${i}`} r="2" fill={ACCENT}
+            initial={{ cx: 140, cy: 60, opacity: 0 }}
+            animate={{
+              cx: [140, 80 + i * 60],
+              cy: [60, 80],
+              opacity: [0, 1, 0],
+            }}
+            transition={{ duration: 1, repeat: Infinity, delay: i * 0.4 + 1.5, repeatDelay: 0.5 }}
           />
         ))}
       </svg>
@@ -121,7 +114,7 @@ function LoadBalancerDiagram() {
 }
 
 export default function AutoScaling() {
-  const { phase } = useSceneProgress({ totalPhases: 6 });
+  const { phase } = useSceneProgress({ totalPhases: 6, autoAdvance: [2500, 2000, 2000, 2000, 2000, 3500] });
 
   const currentStep = phase < 5 ? autoScalingSteps[Math.min(phase, autoScalingSteps.length - 1)] : null;
 
@@ -135,7 +128,7 @@ export default function AutoScaling() {
       <motion.h2
         className="text-3xl md:text-4xl font-display font-bold mb-1"
         style={{ color: ACCENT }}
-        variants={fadeInUp}
+        variants={cinematicReveal}
         initial="hidden"
         animate="visible"
       >
@@ -143,48 +136,46 @@ export default function AutoScaling() {
       </motion.h2>
       <motion.p
         className="text-sm text-white/40 font-body mb-6"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3, duration: 0.6 }}
       >
         Elastic infrastructure that responds to demand
       </motion.p>
 
-      {/* Scaling steps (phases 0-4) */}
       {currentStep && (
         <AnimatePresence mode="wait">
           <motion.div
             key={phase}
             className="flex flex-col items-center gap-4 w-full max-w-lg"
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -30 }}
-            transition={{ duration: 0.4 }}
+            initial={{ opacity: 0, x: 40, filter: 'blur(6px)' }}
+            animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }}
+            exit={{ opacity: 0, x: -40, filter: 'blur(6px)' }}
+            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
           >
-            {/* Step label */}
             <motion.div
-              className="px-4 py-2 rounded-full text-sm font-display font-bold"
+              className="px-4 py-2 rounded-full text-sm font-display font-bold relative overflow-hidden"
               style={{ color: currentStep.color, border: `1.5px solid ${currentStep.color}40`, background: `${currentStep.color}10` }}
             >
-              {currentStep.label}
+              <motion.div className="absolute inset-0"
+                style={{ background: `linear-gradient(90deg, transparent, ${currentStep.color}15, transparent)` }}
+                animate={{ x: ['-100%', '200%'] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }} />
+              <span className="relative z-10">{currentStep.label}</span>
             </motion.div>
-
-            {/* Servers */}
             <ServerCluster count={currentStep.servers} color={currentStep.color} />
-
-            {/* Users */}
             <UserIcons count={currentStep.users} />
-
-            {/* Step counter */}
             <div className="flex gap-1.5 mt-2">
               {autoScalingSteps.map((_, i) => (
-                <div
+                <motion.div
                   key={i}
                   className="w-2 h-2 rounded-full"
                   style={{
                     background: i === phase ? currentStep.color : 'rgba(255,255,255,0.1)',
                     boxShadow: i === phase ? `0 0 8px ${currentStep.color}60` : 'none',
                   }}
+                  animate={i === phase ? { scale: [1, 1.3, 1] } : {}}
+                  transition={{ duration: 1, repeat: Infinity }}
                 />
               ))}
             </div>
@@ -192,12 +183,10 @@ export default function AutoScaling() {
         </AnimatePresence>
       )}
 
-      {/* Phase 5: Load balancer diagram */}
       <AnimatePresence>
         {phase >= 5 && <LoadBalancerDiagram />}
       </AnimatePresence>
 
-      {phase < 5 && <InteractiveIndicator className="mt-6" />}
       <Narration text={narrations.scene9} delay={0.4} />
     </motion.div>
   );

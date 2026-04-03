@@ -2,10 +2,9 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { useSceneProgress } from '@/components/hooks/useSceneProgress';
-import { fadeInUp, staggerContainer } from '@/lib/animations';
+import { fadeInUp, staggerContainer, cinematicReveal } from '@/lib/animations';
 import { narrations, comparisonCriteria } from '@/lib/content';
 import Narration from '@/components/shared/Narration';
-import InteractiveIndicator from '@/components/shared/InteractiveIndicator';
 
 const COLORS = {
   iaas: '#3B82F6',
@@ -56,12 +55,28 @@ function DecisionHelper() {
       {decisions.map((d, i) => (
         <motion.div
           key={d.answer}
-          className="flex-1 p-4 rounded-lg border border-white/10 text-center"
+          className="relative flex-1 p-4 rounded-lg border border-white/10 text-center overflow-hidden"
           style={{ background: `${d.color}08`, borderColor: `${d.color}30` }}
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: i * 0.2, type: 'spring', stiffness: 200, damping: 15 }}
         >
+          {/* Shimmer sweep overlay */}
+          <motion.div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: `linear-gradient(105deg, transparent 40%, ${d.color}15 50%, transparent 60%)`,
+            }}
+            initial={{ x: '-100%' }}
+            animate={{ x: '200%' }}
+            transition={{
+              duration: 3,
+              repeat: Infinity,
+              repeatDelay: 1.5,
+              delay: i * 0.4,
+              ease: 'easeInOut',
+            }}
+          />
           <p className="text-xs text-white/50 font-body mb-2">{d.question}</p>
           <motion.span
             className="text-xl font-display font-bold"
@@ -84,7 +99,7 @@ function DecisionHelper() {
 }
 
 export default function ServiceComparison() {
-  const { phase } = useSceneProgress({ totalPhases: 3 });
+  const { phase } = useSceneProgress({ totalPhases: 3, autoAdvance: [3000, 2500, 4000] });
 
   return (
     <motion.div
@@ -95,7 +110,7 @@ export default function ServiceComparison() {
     >
       <motion.h2
         className="text-3xl md:text-4xl font-display font-bold text-white mb-1"
-        variants={fadeInUp}
+        variants={cinematicReveal}
         initial="hidden"
         animate="visible"
       >
@@ -151,7 +166,6 @@ export default function ServiceComparison() {
         {phase >= 2 && <DecisionHelper />}
       </AnimatePresence>
 
-      {phase < 2 && <InteractiveIndicator className="mt-6" />}
       <Narration text={narrations.scene6} delay={0.4} />
     </motion.div>
   );

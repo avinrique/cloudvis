@@ -6,6 +6,34 @@ import { useAppStore } from '@/lib/store';
 import NavigationHUD from './NavigationHUD';
 import SpeedControl from './SpeedControl';
 import ErrorBoundary from './shared/ErrorBoundary';
+import CinematicBackground from './shared/CinematicBackground';
+
+const sceneVariants = {
+  initial: {
+    opacity: 0,
+    scale: 1.08,
+    filter: 'blur(12px) brightness(0.6)',
+  },
+  animate: {
+    opacity: 1,
+    scale: 1,
+    filter: 'blur(0px) brightness(1)',
+    transition: {
+      duration: 0.8,
+      ease: [0.22, 1, 0.36, 1] as const,
+      filter: { duration: 0.6 },
+    },
+  },
+  exit: {
+    opacity: 0,
+    scale: 0.94,
+    filter: 'blur(8px) brightness(0.5)',
+    transition: {
+      duration: 0.5,
+      ease: [0.55, 0, 1, 0.45] as const,
+    },
+  },
+};
 
 export default function SceneManager() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,7 +69,6 @@ export default function SceneManager() {
         prevScene();
         break;
       default:
-        // Number keys 1-9, 0 for scene jumping
         if (e.key >= '1' && e.key <= '9') {
           e.preventDefault();
           goToScene(parseInt(e.key) - 1);
@@ -53,14 +80,13 @@ export default function SceneManager() {
     }
   }, [nextScene, prevScene, togglePause, goToScene]);
 
-  // Global keyboard listener
   useEffect(() => {
     const handler = (e: KeyboardEvent) => handleKeyDown(e);
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [handleKeyDown]);
 
-  // Touch/swipe support
+  // Touch/swipe
   useEffect(() => {
     let touchStartY = 0;
     let touchStartX = 0;
@@ -105,23 +131,31 @@ export default function SceneManager() {
       onKeyDown={handleKeyDown}
       className="relative w-screen h-screen overflow-hidden bg-void outline-none"
     >
+      {/* Persistent cinematic background */}
+      <CinematicBackground />
+
       <NavigationHUD />
       <SpeedControl />
 
       <AnimatePresence mode="wait">
         <motion.div
           key={currentScene.id}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-          className="absolute inset-0"
+          variants={sceneVariants}
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          className="absolute inset-0 z-10"
+          style={{ willChange: 'transform, opacity, filter' }}
         >
           <ErrorBoundary>
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center">
-                  <div className="w-3 h-5 bg-primary cursor-blink" />
+                  <motion.div
+                    className="w-3 h-5 bg-accent-blue rounded-sm"
+                    animate={{ opacity: [1, 0.2, 1], scaleY: [1, 0.8, 1] }}
+                    transition={{ duration: 0.8, repeat: Infinity }}
+                  />
                 </div>
               }
             >
@@ -136,20 +170,20 @@ export default function SceneManager() {
         <button
           onClick={(e) => { e.stopPropagation(); prevScene(); }}
           disabled={currentSceneIndex === 0}
-          className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center text-primary transition-colors"
+          className="w-10 h-10 rounded-full bg-white/5 backdrop-blur-sm hover:bg-white/15 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center text-primary transition-all border border-white/10 hover:border-white/20"
           title="Previous (arrow left/up)"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-        <span className="text-xs text-dim font-code tabular-nums">
+        <span className="text-xs text-dim font-code tabular-nums px-2 py-1 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
           {currentSceneIndex + 1}/{totalScenes}
         </span>
         <button
           onClick={(e) => { e.stopPropagation(); nextScene(); }}
           disabled={currentSceneIndex === totalScenes - 1}
-          className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center text-primary transition-colors"
+          className="w-10 h-10 rounded-full bg-white/5 backdrop-blur-sm hover:bg-white/15 disabled:opacity-20 disabled:cursor-not-allowed flex items-center justify-center text-primary transition-all border border-white/10 hover:border-white/20"
           title="Next (arrow right/down)"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
